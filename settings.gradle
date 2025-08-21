@@ -1,0 +1,13 @@
+
+// ---------------------------------------------
+// settings.gradle for Resilient Spring WebFlux POC
+// This file configures the Gradle project structure.
+// ---------------------------------------------
+
+// Set the root project name (used in build scans, IDEs, etc.)
+rootProject.name = 'resilientspringwebflux'
+
+// Example: To add subprojects in the future, uncomment and edit the following line:
+// include 'api', 'service', 'web', 'common'
+
+// No subprojects are currently included. Add them above as needed.

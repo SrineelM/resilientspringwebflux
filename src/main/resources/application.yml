@@ -1,0 +1,139 @@
+# --------------------------------------------------------
+# application.yml
+# Resilient Spring WebFlux POC - Main Configuration
+# --------------------------------------------------------
+
+server:
+  port: 8080
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 2MB
+  netty:
+    connection-timeout: 60s
+
+spring:
+  application:
+    name: resilient-webflux-poc
+  profiles:
+    # This is the default profile that will be active unless overridden
+    active: dev
+
+# --- This section contains configurations shared across all profiles,
+#     but often overridden for production in specific files like application-prod.yml.
+#     For this example, we keep them here as defaults.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    enable:
+      reactor: true
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+      group:
+        readiness:
+          include: db
+  tracing:
+    sampling:
+      probability: 1.0
+    propagation:
+      type: W3C
+  zipkin:
+    endpoint: http://zipkin:9411/api/v2/spans
+  # Observability configuration
+  observations:
+    key-values:
+      service.name: "audit-service"
+
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: ${CB_WINDOW_SIZE:10}
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: ${CB_FAILURE_THRESHOLD:50}
+        slow-call-rate-threshold: 100
+        slow-call-duration-threshold: 2s
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 20s
+
+  timelimiter:
+    instances:
+      default:
+        timeout-duration: 10s
+      notificationService:
+        timeout-duration: 5s
+
+  retry:
+    instances:
+      userService:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - java.util.concurrent.TimeoutException
+      auditService:
+        max-attempts: 2
+        wait-duration: 500ms
+
+  bulkhead:
+    instances:
+      userService:
+        max-concurrent-calls: 25
+        max-wait-duration: 10s
+      notificationService:
+        max-concurrent-calls: 10
+        max-wait-duration: 5s
+
+  metrics:
+    enable: true
+    auto-config: true
+
+  prometheus:
+    enable: true
+
+# These are secrets that should be handled with environment variables in a production context
+security:
+  enabled: true
+  jwt:
+    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b}
+    issuer: https://auth.resilient.com
+    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}
+    ttl-seconds: 3600
+    refresh-ttl-seconds: 86400
+
+webhook:
+  secret: ${WEBHOOK_SECRET:default-webhook-secret}
+  hmac-secret: ${WEBHOOK_HMAC_SECRET:default-hmac-secret}
+
+audit:
+  timeout:
+    seconds: 10
+  batch:
+    max-size: 100
+    concurrency: 10
+  retry:
+    max-attempts: 3
+  failure:
+    rate: 0.15  # For simulation, remove in production
+
+auth:
+  demo:
+    user: user
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G

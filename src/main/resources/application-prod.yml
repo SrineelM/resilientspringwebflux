@@ -1,0 +1,146 @@
+# --------------------------------------------------------
+# application-prod.yml
+# Resilient Spring WebFlux POC - Production profile
+# --------------------------------------------------------
+
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  profiles:
+    active: prod
+  application:
+    name: resilient-webflux-poc
+  r2dbc:
+    url: r2dbc:postgresql://${PROD_DB_HOST:localhost}:5432/${PROD_DB_NAME:yourdb}
+    username: ${PROD_DB_USERNAME:youruser}
+    password: ${PROD_DB_PASSWORD:yourpassword}
+    pool:
+      initial-size: 5
+      max-size: 50
+      max-idle-time: 30m
+      validation-query: SELECT 1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  health:
+    db:
+      enabled: true
+    diskspace:
+      enabled: true
+    kafka:
+      enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: 0.1 # Reduced for production
+    propagation:
+      type: W3C
+  zipkin:
+    endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: "health,info,metrics,prometheus"
+      endpoint:
+        health:
+          validate-group-membership: true
+          group:
+            readiness:
+              include: "db,diskSpace"
+            liveness:
+              include: "ping"
+          show-details: never
+          show-components: never
+
+    spring:
+      r2dbc:
+        url: r2dbc:postgresql://<host>:5432/<database>
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+
+    logging:
+      level:
+        com.resilient: INFO
+        org.springframework.boot.actuate.health: INFO
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        wait-duration-in-open-state: 30s
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 100
+        slow-call-duration-threshold: 2s
+    instances:
+      userService:
+        base-config: default
+      notificationService:
+        base-config: default
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 20s
+  timelimiter:
+    instances:
+      default:
+        timeout-duration: 10s
+      notificationService:
+        timeout-duration: 5s
+  retry:
+    instances:
+      userService:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
+          - java.util.concurrent.TimeoutException
+      auditService:
+        max-attempts: 2
+        wait-duration: 500ms
+  bulkhead:
+    instances:
+      userService:
+        max-concurrent-calls: 25
+        max-wait-duration: 10s
+      notificationService:
+        max-concurrent-calls: 10
+        max-wait-duration: 5s
+  metrics:
+    enable: true
+    auto-config: true
+  prometheus:
+    enable: true
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b} # Must be 256-bit or base64 encoded
+    issuer: ${JWT_ISSUER:https://auth.resilient.com}
+    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}
+    ttl-seconds: 3600
+    refresh-ttl-seconds: 86400
+
+webhook:
+  secret: ${WEBHOOK_SECRET:prodwebhooksecret}
+  hmac-secret: ${WEBHOOK_HMAC_SECRET:prodwebhookhmacsecret}
+
+logging:
+  level:
+    com.resilient: INFO
+    io.github.resilience4j: INFO
+    org.springframework: WARN
+
+reactor:
+  debug: false
+
+auth:
+  demo:
+    user: ${DEMO_USER:user}
+    pass-hash: ${DEMO_PASS_HASH:$2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G}

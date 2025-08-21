@@ -1,0 +1,39 @@
+
+# ---------------------------------------------
+# docker-compose.yml for Resilient Spring WebFlux POC
+# Spins up app, Zipkin, Prometheus, and Grafana
+# ---------------------------------------------
+
+version: '3.8'
+services:
+  # Main Spring Boot application
+  app:
+    build: .
+    ports:
+      - "8080:8080" # Expose app port
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker # Use docker profile
+    depends_on:
+      - zipkin
+
+  # Distributed tracing with Zipkin
+  zipkin:
+    image: openzipkin/zipkin:latest
+    ports:
+      - "9411:9411" # Zipkin UI
+
+  # Metrics collection with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090" # Prometheus UI
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml # Custom config
+    depends_on:
+      - app
+
+  # Visualization with Grafana
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000" # Grafana UI

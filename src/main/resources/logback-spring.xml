@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n"/>
+
+    <!-- JSON encoder used for both CONSOLE and JSON appenders -->
+    <appender name="JSON_APPENDER" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app":"${spring.application.name}", "env":"${spring.profiles.active}"}</customFields>
+            <includeMdcKeyName>traceId,spanId</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <!-- Console appender for dev (human-readable) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Correlation ID tracing -->
+    <include resource="org/springframework/cloud/sleuth/logback/sleuth.xml"/>
+
+    <!-- Default root log level -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- Dev profile: console human-readable logs at DEBUG -->
+    <springProfile name="dev">
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Prod profile: structured JSON logs -->
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="JSON_APPENDER"/>
+        </root>
+    </springProfile>
+</configuration>

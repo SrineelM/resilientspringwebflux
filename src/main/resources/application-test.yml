@@ -1,0 +1,39 @@
+# Corrected YAML configuration for testing
+# Place this in src/test/resources/application-test.yml
+
+server:
+  port: 8081
+
+spring:
+  r2dbc:
+    url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ''
+  sql:
+    init:
+      mode: always
+
+# All security properties, including 'jwt', should be correctly nested here.
+# This structure is consistent with the other profiles.
+security:
+  jwt:
+    secret: test_jwt_secret
+    issuer: https://test-auth.com
+    audience: ${JWT_AUDIENCE:test-app,test-portal}
+    ttl-seconds: 3600
+
+webhook:
+  secret: test_webhook_secret
+  hmac-secret: test_hmac_secret
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    com.resilient: DEBUG
+
+auth:
+  demo:
+    user: testuser
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
+

@@ -4,6 +4,7 @@
 // - notificationScheduler uses bounded elastic pool for blocking I/O.
 // - testScheduler uses direct executor for deterministic unit tests.
 // - Scheduler sizes can be tuned via properties for production.
+// - Notification scheduler now includes metrics support.
 
 package com.resilient.config;
 
@@ -11,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Scheduler configuration for Reactor-based async tasks. Expose scheduler sizes via properties for
@@ -20,9 +22,14 @@ import reactor.core.scheduler.Schedulers;
 public class ReactorSchedulerConfig {
 
     @Bean(name = "notificationScheduler", destroyMethod = "dispose")
-    public Scheduler notificationScheduler() {
-        // Size can be externalized via properties
-        return Schedulers.newBoundedElastic(50, Integer.MAX_VALUE, "notification");
+    public Scheduler notificationScheduler(MeterRegistry meterRegistry) {
+        return Schedulers.newBoundedElastic(
+                50,
+                Integer.MAX_VALUE,
+                "notification",
+                30,
+                true,
+                meterRegistry);
     }
 
     @Bean(name = "testScheduler", destroyMethod = "dispose")

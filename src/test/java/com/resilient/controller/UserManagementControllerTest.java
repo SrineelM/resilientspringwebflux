@@ -49,4 +49,17 @@ class UserManagementControllerTest {
                 .expectStatus()
                 .is2xxSuccessful();
     }
+
+    @Test
+    void createUser_invalidEmail() {
+        UserRequest request = new UserRequest("abc", "invalid-email", "Test User");
+
+        webTestClient
+                .post()
+                .uri("/api/users")
+                .bodyValue(request)
+                .exchange()
+                .expectStatus()
+                .isBadRequest();
+    }
 }

@@ -27,15 +27,9 @@ class KafkaIntegrationControllerTest {
 
     @Test
     void produce_happyPath() {
-        Mockito.when(jwtUtil.validateToken(Mockito.anyString(), Mockito.any())).thenReturn(true);
-        Mockito.when(jwtUtil.extractUsername(Mockito.anyString())).thenReturn("testuser");
-        Claims claims = Mockito.mock(Claims.class);
-        Mockito.when(claims.getSubject()).thenReturn("testuser");
-        Mockito.when(claims.getIssuer()).thenReturn("https://auth.dev.resilient.com");
-        Mockito.when(claims.get("aud")).thenReturn(java.util.List.of("resilient-app", "admin-portal"));
-        Mockito.when(claims.getExpiration()).thenReturn(new java.util.Date(System.currentTimeMillis() + 1000000));
-        Mockito.when(claims.get("roles")).thenReturn(java.util.List.of("ROLE_USER"));
-        Mockito.when(jwtUtil.extractAllClaims(Mockito.anyString())).thenReturn(claims);
+        // Use the utility class instead of duplicate setup
+        JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
+        
         webTestClient
                 .post()
                 .uri("/kafka/produce")
@@ -50,14 +44,20 @@ class KafkaIntegrationControllerTest {
 
     @Test
     void consumeMessages_happyPath() {
-        Mockito.when(jwtUtil.validateToken(Mockito.anyString(), Mockito.any())).thenReturn(true);
-        Mockito.when(jwtUtil.extractUsername(Mockito.anyString())).thenReturn("testuser");
-        Claims claims = Mockito.mock(Claims.class);
-        Mockito.when(claims.getSubject()).thenReturn("testuser");
-        Mockito.when(claims.getIssuer()).thenReturn("https://auth.dev.resilient.com");
-        Mockito.when(claims.get("aud")).thenReturn(java.util.List.of("resilient-app", "admin-portal"));
-        Mockito.when(claims.getExpiration()).thenReturn(new java.util.Date(System.currentTimeMillis() + 1000000));
-        Mockito.when(claims.get("roles")).thenReturn(java.util.List.of("ROLE_USER"));
+        // Use the utility class instead of duplicate setup
+        JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
+        
+        webTestClient
+                .get()
+                .uri("/kafka/consume")
+                .header("Authorization", "Bearer test-jwt-token")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBodyList(String.class)
+                .hasSize(10);
+    }
+}
         Mockito.when(jwtUtil.extractAllClaims(Mockito.anyString())).thenReturn(claims);
         webTestClient
                 .get()

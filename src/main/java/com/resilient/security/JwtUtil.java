@@ -108,6 +108,43 @@ public class JwtUtil {
         }
     }
 
+    /**
+     * Validates the token structure, signature, expiration, issuer, and audience
+     * without requiring a specific username
+     */
+    public boolean validateToken(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            Date exp = claims.getExpiration();
+            String iss = claims.getIssuer();
+            
+            // Check expiration
+            if (exp == null || exp.before(new Date())) return false;
+            
+            // Check issuer
+            if (!Objects.equals(issuer, iss)) return false;
+            
+            // Check audience (if configured)
+            if (audience != null && !audience.isEmpty()) {
+                Object aud = claims.get("aud");
+                if (aud instanceof List<?>) {
+                    List<?> audList = (List<?>) aud;
+                    return audList.stream()
+                            .filter(Objects::nonNull)
+                            .map(Object::toString)
+                            .anyMatch(audience::contains);
+                } else if (aud instanceof String) {
+                    return audience.contains(aud.toString());
+                }
+                return false;
+            }
+            
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Remaining validity until expiration; zero/negative if expired or invalid. */
     public Duration getRemainingValidity(String token) {
         try {

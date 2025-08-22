@@ -28,18 +28,9 @@ class DemoKafkaControllerTest {
 
     @Test
     void produce_happyPath() {
-        io.jsonwebtoken.Claims claims = org.mockito.Mockito.mock(io.jsonwebtoken.Claims.class);
-        when(claims.getSubject()).thenReturn("testuser");
-        when(claims.getIssuer()).thenReturn("https://auth.dev.resilient.com");
-        when(claims.get("aud")).thenReturn(java.util.List.of("resilient-app", "admin-portal"));
-        when(claims.getExpiration()).thenReturn(new java.util.Date(System.currentTimeMillis() + 1000000));
-        when(claims.get("roles")).thenReturn(java.util.List.of("ROLE_USER"));
-        when(jwtUtil.extractAllClaims(org.mockito.ArgumentMatchers.eq("test-jwt-token")))
-                .thenReturn(claims);
-        when(jwtUtil.extractUsername(org.mockito.ArgumentMatchers.eq("test-jwt-token")))
-                .thenReturn("testuser");
-        when(jwtUtil.validateToken(org.mockito.ArgumentMatchers.eq("test-jwt-token"), any()))
-                .thenReturn(true);
+        // Simplified with utility class
+        JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
+        
         webTestClient
                 .post()
                 .uri("/kafka/produce")
@@ -54,11 +45,20 @@ class DemoKafkaControllerTest {
 
     @Test
     void consumeMessages_happyPath() {
-        io.jsonwebtoken.Claims claims = org.mockito.Mockito.mock(io.jsonwebtoken.Claims.class);
-        when(claims.getSubject()).thenReturn("testuser");
-        when(claims.getIssuer()).thenReturn("https://auth.dev.resilient.com");
-        when(claims.get("aud")).thenReturn(java.util.List.of("resilient-app", "admin-portal"));
-        when(claims.getExpiration()).thenReturn(new java.util.Date(System.currentTimeMillis() + 1000000));
+        // Simplified with utility class
+        JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
+        
+        webTestClient
+                .get()
+                .uri("/kafka/consume")
+                .header("Authorization", "Bearer test-jwt-token")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBodyList(String.class)
+                .hasSize(10);
+    }
+}
         when(claims.get("roles")).thenReturn(java.util.List.of("ROLE_USER"));
         when(jwtUtil.extractAllClaims(org.mockito.ArgumentMatchers.eq("test-jwt-token")))
                 .thenReturn(claims);

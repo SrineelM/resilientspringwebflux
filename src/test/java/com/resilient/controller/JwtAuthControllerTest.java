@@ -45,9 +45,8 @@ class JwtAuthControllerTest {
     @Test
     void login_happyPath() {
         when(passwordEncoder.matches(any(), any())).thenReturn(true);
-        when(jwtUtil.generateToken(any(), any())).thenReturn("jwt-token");
-        when(jwtUtil.validateToken(any(), any())).thenReturn(true);
-        when(jwtUtil.extractUsername(any())).thenReturn("user");
+        JwtTestUtil.setupTokenGeneration(jwtUtil, "user", "jwt-token");
+        JwtTestUtil.setupJwtMock(jwtUtil, "jwt-token", "user");
         Claims claims = Mockito.mock(Claims.class);
         when(claims.getSubject()).thenReturn("user");
         when(claims.getIssuer()).thenReturn("https://auth.dev.resilient.com");
@@ -65,6 +64,19 @@ class JwtAuthControllerTest {
                 .exchange()
                 .expectStatus()
                 .isOk(); // Token returned, body can be checked if needed
+    }
+
+    @Test
+    void login_invalidCredentials() {
+        when(passwordEncoder.matches(any(), any())).thenReturn(false);
+
+        webTestClient
+                .post()
+                .uri("/api/auth/login")
+                .bodyValue("{\"username\":\"user\",\"password\":\"wrong\"}")
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
     }
 
     @Test

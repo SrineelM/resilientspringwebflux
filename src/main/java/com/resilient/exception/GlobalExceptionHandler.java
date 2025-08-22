@@ -4,6 +4,7 @@ import com.resilient.dto.ErrorResponse;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,9 +33,23 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(WebExchangeBindException.class)
-    public Mono<ResponseEntity<ErrorResponse>> handleValidationException(WebExchangeBindException ex) {
-        String message = ex.getBindingResult().getAllErrors().get(0).getDefaultMessage();
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, ex, false);
+    public Mono<ResponseEntity<ErrorResponse>> handleValidationErrors(WebExchangeBindException ex) {
+        return Mono.deferContextual(ctx -> {
+            String correlationId = ctx.getOrDefault("correlationId", "N/A");
+            
+            String message = ex.getBindingResult()
+                    .getFieldErrors()
+                    .stream()
+                    .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                    .collect(Collectors.joining(", "));
+            
+            log.warn("Validation error - correlationId: {}, errors: {}", correlationId, message);
+            
+            return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("VALIDATION_ERROR", message, correlationId, Instant.now(), 
+                          ex.getBindingResult().getAllErrors())));
+        });
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

@@ -247,4 +247,26 @@ public class UserService {
     public Mono<ResponseEntity<UserResponse>> updateUser(Long id, UserRequest request) {
         throw new UnsupportedOperationException("Unimplemented method 'updateUser'");
     }
+
+    private Mono<Void> validateUserRequest(UserRequest request) {
+        return Mono.defer(() -> {
+            if (request == null) {
+                return Mono.error(new IllegalArgumentException("User request cannot be null"));
+            }
+
+            if (request.username() == null || request.username().trim().isEmpty()) {
+                return Mono.error(new IllegalArgumentException("Username cannot be empty"));
+            }
+
+            if (request.email() == null || !request.email().matches("^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$")) {
+                return Mono.error(new IllegalArgumentException("Invalid email format"));
+            }
+
+            if (request.fullName() == null || request.fullName().trim().isEmpty()) {
+                return Mono.error(new IllegalArgumentException("Full name cannot be empty"));
+            }
+
+            return Mono.empty();
+        });
+    }
 }

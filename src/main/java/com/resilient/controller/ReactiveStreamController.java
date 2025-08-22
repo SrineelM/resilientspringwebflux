@@ -46,7 +46,7 @@ public class ReactiveStreamController {
         return Flux.interval(Duration.ofSeconds(1))
                 .take(10)
                 .map(i -> UserResponse.from(User.create("User" + i, "user" + i + "@example.com", "User " + i)))
-                .onBackpressureBuffer(bufferSize, v -> {}, reactor.core.publisher.BufferOverflowStrategy.DROP_LATEST)
+                .onBackpressureDrop(user -> log.warn("Dropping user due to backpressure: {}", user.username()))
                 .timeout(Duration.ofMinutes(2))
                 .doOnError(ex -> log.error("SSE streaming error", ex))
                 .doFinally(sig -> log.info("SSE stream finished with signal: {}", sig));

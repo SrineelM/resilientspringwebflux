@@ -1,37 +1,24 @@
-// ...existing code...
-// ...existing code...
 package com.resilient.controller;
+
+import com.resilient.config.TestSecurityConfig;
+import com.resilient.security.JwtUtil;
+import io.jsonwebtoken.Claims;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.resilient.security.JwtUtil;
-import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
-// ...existing code...
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("dev")
-@TestPropertySource(
-        properties = {
-            "management.endpoint.health.validate-group-membership=false",
-            "logging.level.org.springframework.security=DEBUG"
-        })
+@WebFluxTest(controllers = JwtAuthController.class)
+@Import(TestSecurityConfig.class)
 class JwtAuthControllerTest {
-    @MockBean
-    com.resilient.security.TokenBlacklistService tokenBlacklistService;
-
-    @MockBean
-    @org.springframework.beans.factory.annotation.Qualifier("authScheduler")
-    reactor.core.scheduler.Scheduler authScheduler;
 
     @Autowired
     private WebTestClient webTestClient;
@@ -41,6 +28,13 @@ class JwtAuthControllerTest {
 
     @MockBean
     PasswordEncoder passwordEncoder;
+
+    @MockBean
+    com.resilient.security.TokenBlacklistService tokenBlacklistService;
+
+    @MockBean
+    @org.springframework.beans.factory.annotation.Qualifier("authScheduler")
+    reactor.core.scheduler.Scheduler authScheduler;
 
     @Test
     void login_happyPath() {
@@ -62,21 +56,18 @@ class JwtAuthControllerTest {
                 .uri("/api/auth/login")
                 .bodyValue("{\"username\":\"user\",\"password\":\"pass\"}")
                 .exchange()
-                .expectStatus()
-                .isOk(); // Token returned, body can be checked if needed
+                .expectStatus().isOk();
     }
 
     @Test
     void login_invalidCredentials() {
         when(passwordEncoder.matches(any(), any())).thenReturn(false);
-
         webTestClient
                 .post()
                 .uri("/api/auth/login")
                 .bodyValue("{\"username\":\"user\",\"password\":\"wrong\"}")
                 .exchange()
-                .expectStatus()
-                .isUnauthorized();
+                .expectStatus().isUnauthorized();
     }
 
     @Test
@@ -98,7 +89,6 @@ class JwtAuthControllerTest {
                 .uri("/api/auth/logout")
                 .header("Authorization", "Bearer jwt-token")
                 .exchange()
-                .expectStatus()
-                .isOk();
+                .expectStatus().isOk();
     }
 }

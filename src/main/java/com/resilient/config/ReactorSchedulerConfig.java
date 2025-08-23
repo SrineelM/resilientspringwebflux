@@ -8,11 +8,12 @@
 
 package com.resilient.config;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Scheduler configuration for Reactor-based async tasks. Expose scheduler sizes via properties for
@@ -23,13 +24,12 @@ public class ReactorSchedulerConfig {
 
     @Bean(name = "notificationScheduler", destroyMethod = "dispose")
     public Scheduler notificationScheduler(MeterRegistry meterRegistry) {
-        return Schedulers.newBoundedElastic(
-                50,
-                Integer.MAX_VALUE,
-                "notification",
-                30,
-                true,
-                meterRegistry);
+    return Schedulers.newBoundedElastic(
+        50,
+        Integer.MAX_VALUE,
+        "notification",
+        30,
+        true);
     }
 
     @Bean(name = "testScheduler", destroyMethod = "dispose")

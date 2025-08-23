@@ -7,7 +7,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.web.reactive.function.server.ServerSentEvent;
+import com.resilient.dto.UserResponse;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 

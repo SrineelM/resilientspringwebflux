@@ -118,6 +118,7 @@ dependencies {
         implementation('org.codehaus.groovy:groovy-json:3.0.9')
         implementation('org.codehaus.groovy:groovy-xml:3.0.9')
     }
+
 }
 
 def isMac = System.getProperty('os.name').toLowerCase().contains('mac')

@@ -1,9 +1,7 @@
 package com.resilient.controller;
 
 import com.resilient.security.JwtUtil;
-import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -57,16 +55,33 @@ class KafkaIntegrationControllerTest {
                 .expectBodyList(String.class)
                 .hasSize(10);
     }
-}
-        Mockito.when(jwtUtil.extractAllClaims(Mockito.anyString())).thenReturn(claims);
+
+    @Test
+    void produce_invalidToken_shouldReturnUnauthorized() {
+        // Simulate invalid JWT
+        org.mockito.Mockito.when(jwtUtil.validateToken(org.mockito.Mockito.anyString(), org.mockito.Mockito.any())).thenReturn(false);
+
+        webTestClient
+                .post()
+                .uri("/kafka/produce")
+                .header("Authorization", "Bearer invalid-token")
+                .bodyValue("test-message")
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
+    }
+
+    @Test
+    void consumeMessages_invalidToken_shouldReturnUnauthorized() {
+        org.mockito.Mockito.when(jwtUtil.validateToken(org.mockito.Mockito.anyString(), org.mockito.Mockito.any())).thenReturn(false);
+
         webTestClient
                 .get()
                 .uri("/kafka/consume")
-                .header("Authorization", "Bearer test-jwt-token")
+                .header("Authorization", "Bearer invalid-token")
                 .exchange()
                 .expectStatus()
-                .isOk()
-                .expectBodyList(String.class)
-                .hasSize(10);
+                .isUnauthorized();
     }
+    // ...existing code...
 }

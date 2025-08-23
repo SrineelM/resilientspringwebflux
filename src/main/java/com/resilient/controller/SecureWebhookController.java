@@ -1,18 +1,13 @@
 package com.resilient.controller;
 
 import com.resilient.security.ReactiveRateLimiter;
+import com.resilient.security.WebhookSignatureValidator;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.micrometer.observation.annotation.Observed;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.Map;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,16 +27,11 @@ public class SecureWebhookController {
     private static final Logger log = LoggerFactory.getLogger(SecureWebhookController.class);
 
     private final ReactiveRateLimiter reactiveRateLimiter;
-    private final String webhookSecret;
-    private final String hmacSecret;
+    private final WebhookSignatureValidator signatureValidator;
 
-    public SecureWebhookController(
-            ReactiveRateLimiter reactiveRateLimiter,
-            @Value("${webhook.secret:change-me}") String webhookSecret,
-            @Value("${webhook.hmac-secret:change-me}") String hmacSecret) {
+    public SecureWebhookController(ReactiveRateLimiter reactiveRateLimiter, WebhookSignatureValidator signatureValidator) {
         this.reactiveRateLimiter = reactiveRateLimiter;
-        this.webhookSecret = webhookSecret;
-        this.hmacSecret = hmacSecret;
+        this.signatureValidator = signatureValidator;
     }
 
     @PostMapping(value = "/event", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -67,21 +57,19 @@ public class SecureWebhookController {
         }
 
         // Rate limiting check
-        return reactiveRateLimiter
-                .isAllowed(ip)
-                .flatMap(allowed -> {
-                    if (!allowed) {
-                        log.warn("Rate limit exceeded for IP: {}", ip);
-                        return Mono.just(ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                                .body("Rate limit exceeded"));
-                    }
-
-                    return validateStaticSecret(headers)
-                            .then(payload.publishOn(Schedulers.boundedElastic()).flatMap(body -> validateHmacSignature(
-                                            body, headers.getOrDefault("x-webhook-signature", ""))
-                                    .then(processWebhookPayload(body))
-                                    .thenReturn(ResponseEntity.accepted().body("Event processed"))));
-                })
+    return reactiveRateLimiter.isAllowed(ip)
+        .flatMap(allowed -> {
+            if (!allowed) {
+            log.warn("Rate limit exceeded for IP: {}", ip);
+            return Mono.just(ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body("Rate limit exceeded"));
+            }
+            return signatureValidator.validateStaticSecret(headers)
+                .then(payload.publishOn(Schedulers.boundedElastic())
+                    .flatMap(body -> signatureValidator
+                        .validateHmacSignature(body, headers.getOrDefault("x-webhook-signature", ""))
+                        .then(processWebhookPayload(body))
+                        .thenReturn(ResponseEntity.accepted().body("Event processed"))));
+        })
                 .timeout(Duration.ofSeconds(30))
                 .onErrorResume(SecurityException.class, ex -> {
                     log.error("Security validation failed for IP: {}, error: {}", ip, ex.getMessage());
@@ -93,30 +81,6 @@ public class SecureWebhookController {
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                             .body("Internal server error"));
                 });
-    }
-
-    private Mono<Void> validateStaticSecret(Map<String, String> headers) {
-        String providedSecret = headers.getOrDefault("x-webhook-secret", "");
-        if (!webhookSecret.equals(providedSecret)) {
-            return Mono.error(new SecurityException("Invalid static secret"));
-        }
-        return Mono.empty();
-    }
-
-    private Mono<Void> validateHmacSignature(String payload, String signature) {
-        return Mono.fromCallable(() -> {
-                    if (signature.isEmpty()) {
-                        throw new SecurityException("Missing HMAC signature");
-                    }
-
-                    String expected = hmac(payload, hmacSecret);
-                    if (!MessageDigest.isEqual(
-                            expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8))) {
-                        throw new SecurityException("Invalid HMAC signature");
-                    }
-                    return true;
-                })
-                .then();
     }
 
     private Mono<Void> processWebhookPayload(String payload) {
@@ -133,13 +97,4 @@ public class SecureWebhookController {
         });
     }
 
-    private String hmac(String data, String secret) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return Base64.getEncoder().encodeToString(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("HMAC calculation error", e);
-        }
-    }
 }

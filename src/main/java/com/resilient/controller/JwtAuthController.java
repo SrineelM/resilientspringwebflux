@@ -8,45 +8,34 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 
 /** Production-grade JWT auth controller with login + logout (blacklist). */
 @RestController
 @RequestMapping("/api/auth")
 public class JwtAuthController {
 
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthController.class);
 
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
-    private final Scheduler authScheduler;
-    private final String demoUser;
-    private final String demoPassHash;
+    private final ReactiveUserDetailsService userDetailsService;
     private final TokenBlacklistService blacklistService; // abstract base with TTL
 
     public JwtAuthController(
             JwtUtil jwtUtil,
             PasswordEncoder passwordEncoder,
-            @Value("${auth.demo.user:user}") String demoUser,
-            @Value("${auth.demo.pass-hash}") String demoPassHash,
-            @Qualifier("authScheduler") Scheduler authScheduler,
+            ReactiveUserDetailsService userDetailsService,
             TokenBlacklistService blacklistService // can be in-memory (dev) or Redis (prod)
             ) {
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
-        this.demoUser = demoUser;
-        this.demoPassHash = demoPassHash;
-        this.authScheduler = authScheduler;
+    this.userDetailsService = userDetailsService;
         this.blacklistService = blacklistService;
     }
 
@@ -55,20 +44,18 @@ public class JwtAuthController {
     /** Login: validates credentials and issues a JWT with roles. */
     @PostMapping("/login")
     public Mono<ResponseEntity<Map<String, Object>>> login(@Valid @RequestBody LoginRequest req) {
-        return Mono.fromCallable(
-                        () -> demoUser.equals(req.username()) && passwordEncoder.matches(req.password(), demoPassHash))
-                .timeout(java.time.Duration.ofSeconds(2))
-                .flatMap(authenticated -> {
-                    if (!authenticated) {
-                        return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                                .body(Map.of("error", "Invalid credentials")));
-                    }
-                    String token = jwtUtil.generateToken(req.username(), Map.of("roles", List.of("USER")));
-                    Map<String, Object> body = new HashMap<>();
-                    body.put("token", token);
-                    body.put("expires_in", jwtUtil.getExpiration(token));
-                    return Mono.just(ResponseEntity.ok(body));
-                });
+    return userDetailsService.findByUsername(req.username())
+        .filter(ud -> passwordEncoder.matches(req.password(), ud.getPassword()))
+        .map(ud -> {
+            List<String> roles = ud.getAuthorities().stream().map(a -> a.getAuthority()).toList();
+            String token = jwtUtil.generateToken(req.username(), Map.of("roles", roles));
+            Map<String, Object> body = new HashMap<>();
+            body.put("token", token);
+            body.put("expires_in", jwtUtil.getExpiration(token));
+            return ResponseEntity.ok(body);
+        })
+        .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(Map.of("error", "Invalid credentials"))));
     }
 
     /** Logout: extracts bearer token and blacklists it until its natural expiry. */
@@ -96,6 +83,33 @@ public class JwtAuthController {
                     // Fail-closed: if blacklisting fails, send 500
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                             .build());
+                });
+    }
+
+    /** Refresh token: issues a new token if within session window and not blacklisted. */
+    @PostMapping("/refresh")
+    public Mono<ResponseEntity<Map<String, Object>>> refresh(
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+        String token = authHeader.substring(7).trim();
+        if (!StringUtils.hasText(token)) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+        return Mono.fromCallable(() -> jwtUtil.validateWithRotation(token))
+                .flatMap(valid -> {
+                    if (!valid) return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+                    String newToken;
+                    try {
+                        newToken = jwtUtil.refreshToken(token);
+                    } catch (Exception e) {
+                        return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+                    }
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("token", newToken);
+                    body.put("expires_in", jwtUtil.getExpiration(newToken));
+                    return Mono.just(ResponseEntity.ok(body));
                 });
     }
 }

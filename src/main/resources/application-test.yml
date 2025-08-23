@@ -21,6 +21,16 @@ security:
     issuer: https://test-auth.com
     audience: ${JWT_AUDIENCE:test-app,test-portal}
     ttl-seconds: 3600
+    keys:
+      - test_jwt_secret
+      - old_secret_one
+      - old_secret_two
+
+messaging:
+  kafka:
+    consumer:
+      topic: test-consume-topic
+      group: test-group
 
 webhook:
   secret: test_webhook_secret
@@ -36,4 +46,12 @@ auth:
   demo:
     user: testuser
     pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
+
+outbox:
+  dispatch:
+    enableKafka: false
+    enableActiveMq: false
+    interval:
+      ms: 600000
+
 

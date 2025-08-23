@@ -47,6 +47,8 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
 
     private final String expectedIssuer;
     private final List<String> allowedAudiences;
+    private final List<String> allowedClientIds;
+    private final int minTokenVersion;
 
     @Autowired
     public ReactiveJwtAuthenticationManager(
@@ -54,7 +56,9 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
             @Qualifier("authScheduler") Scheduler authScheduler,
             @Autowired(required = false) TokenBlacklistService blacklistService,
             @Value("${security.jwt.issuer}") String expectedIssuer,
-            @Value("${security.jwt.audience}") List<String> allowedAudiences) {
+            @Value("${security.jwt.audience}") List<String> allowedAudiences,
+            @Value("${security.jwt.allowed-client-ids:}") List<String> allowedClientIds,
+            @Value("${security.jwt.min-version:0}") int minTokenVersion) {
 
         this.jwtUtil = Objects.requireNonNull(jwtUtil, "jwtUtil must not be null");
         this.authScheduler = authScheduler != null ? authScheduler : Schedulers.boundedElastic();
@@ -62,21 +66,29 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
 
         this.expectedIssuer = Objects.requireNonNull(expectedIssuer, "issuer must not be null")
                 .trim();
-        this.allowedAudiences = allowedAudiences != null
+    this.allowedAudiences = allowedAudiences != null
                 ? allowedAudiences.stream()
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())
                         .toList()
                 : Collections.emptyList();
+    this.allowedClientIds = allowedClientIds != null
+        ? allowedClientIds.stream().map(String::trim).filter(s -> !s.isEmpty()).toList()
+        : Collections.emptyList();
+    this.minTokenVersion = minTokenVersion;
     }
 
     @Override
     public Mono<Authentication> convert(ServerWebExchange exchange) {
         String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
-        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+    if (!StringUtils.hasText(authHeader)) {
             return Mono.empty();
         }
-        String token = authHeader.substring(7).trim();
+    final String bearerHeader = authHeader; // local non-null after hasText check
+    if (bearerHeader == null || !bearerHeader.startsWith("Bearer ")) {
+            return Mono.empty();
+        }
+    String token = bearerHeader.substring(7).trim();
         if (!StringUtils.hasText(token)) {
             return Mono.empty();
         }
@@ -112,11 +124,18 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
     private Mono<Authentication> validateAndCreateAuth(String token) {
         try {
             String username = jwtUtil.extractUsername(token);
-            if (!StringUtils.hasText(username) || !jwtUtil.validateToken(token, username)) {
+            boolean structuralValid = StringUtils.hasText(username) && (jwtUtil.validateToken(token, username) || jwtUtil.validateWithRotation(token));
+            if (!structuralValid) {
                 return Mono.empty();
             }
             Claims claims = jwtUtil.extractAllClaims(token);
             if (!validateIssuerAndAudience(claims)) {
+                return Mono.empty();
+            }
+            // Extended claims (client id, version, type) enforcement when configuration present
+            List<String> clientIdsToEnforce = allowedClientIds.isEmpty() ? null : allowedClientIds;
+            if (!jwtUtil.validateExtendedClaims(token, clientIdsToEnforce, minTokenVersion)) {
+                log.warn("JWT extended claims validation failed");
                 return Mono.empty();
             }
             Object rawRoles = claims.get("roles");

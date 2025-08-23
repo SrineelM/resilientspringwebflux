@@ -1,41 +1,31 @@
 package com.resilient.security;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+/** Simple in-memory sliding window limiter for test/local/dev profiles. */
 @Service
-@Profile({"dev", "local"})
+@Profile({"test","local","dev"})
 public class InMemoryReactiveRateLimiter implements ReactiveRateLimiter {
-
-    private final Map<String, AtomicInteger> requestCounts = new ConcurrentHashMap<>();
-
-    @Value("${webhook.rate-limit:30}")
-    private int rateLimit;
-
-    private final MeterRegistry meterRegistry;
-
-    public InMemoryReactiveRateLimiter(MeterRegistry meterRegistry) {
-        this.meterRegistry = meterRegistry;
-    }
+    private final Map<String,Window> windows = new ConcurrentHashMap<>();
+    private final int limit = 5; // low threshold for tests
+    private final long windowMillis = 2000;
 
     @Override
-    public Mono<Boolean> isAllowed(String ip) {
-        AtomicInteger count = requestCounts.computeIfAbsent(ip, k -> new AtomicInteger(0));
-        boolean allowed = count.incrementAndGet() <= rateLimit;
-        
-        // Record metrics
-        if (allowed) {
-            meterRegistry.counter("rate_limiter.allowed", "ip", ip).increment();
-        } else {
-            meterRegistry.counter("rate_limiter.blocked", "ip", ip).increment();
-        }
-        
-        return Mono.just(allowed);
+    public Mono<Boolean> isAllowed(String key) {
+        long now = System.currentTimeMillis();
+        Window w = windows.compute(key, (k, existing) -> {
+            if (existing == null || now - existing.start >= windowMillis) {
+                return new Window(now,1);
+            }
+            existing.count++;
+            return existing;
+        });
+        return Mono.just(w.count <= limit);
     }
+
+    private static class Window { long start; int count; Window(long s,int c){start=s;count=c;} }
 }

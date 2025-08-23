@@ -5,25 +5,49 @@ This project includes a .github/copilot-instructions.md file to guide AI coding 
 
 Overview
 
-This project demonstrates a scalable, secure, and observable Java application using Spring WebFlux, Resilience4j, OpenTelemetry, JWT authentication, webhooks, and reactive messaging with Kafka and ActiveMQ.
-
-It models a modern, cloud-native, event-driven system with best practices for security, resilience, observability, and performance.
+This project demonstrates a scalable, secure, observable, and resilient reactive Java application built with Spring WebFlux. It integrates:
+- Security hardening (JWT rotation, extended claims, selective CSRF, strict headers)
+- Messaging reliability (Kafka + ActiveMQ with DLQ, correlation & tracing headers, transactional outbox)
+- Resilience patterns (circuit breaker, retry, rate limiting, graceful shutdown)
+- Observability (Micrometer, OpenTelemetry tracing, Prometheus, Zipkin)
+- Modular profile-driven behavior (prod vs local/dev stubs)
 
 Key Features
 
-Resilience: Circuit breakers, retries, bulkheads, and time limiters via Resilience4j.
+Security:
+- JWT auth with rotating keys, refresh support, issuer/audience enforcement, extended claim validation (type/client_id/version).
+- SecretProvider abstraction for external secret rotation.
+- Selective CSRF toggle (disabled by default for pure API, can be enabled).
+- HMAC-signed webhook endpoints with replay protection potential.
+- Strict security headers: CSP, Referrer-Policy, Frame-Deny, Permissions-Policy.
 
-Observability: Distributed tracing, metrics, and health checks integrated with OpenTelemetry, Zipkin, Prometheus, and Grafana.
+Resilience:
+- Resilience4j circuit breakers, retries, bulkheads & time limiters.
+- Circuit breaker + exponential backoff around outbox publishing.
+- Reactive sliding-window rate limiting: Redis in prod, in-memory for dev/test.
 
-Security: JWT authentication/authorization, secure webhooks with HMAC validation, rate limiting, input validation, and secure messaging.
+Messaging Reliability:
+- Kafka & ActiveMQ producers with correlationId + W3C traceparent propagation.
+- Dead-letter handling (Kafka DLQ via suffix; ActiveMQ DLQ reroute on processing failure).
+- Transactional Outbox pattern (`message_outbox` table) with reactive dispatcher: NEW -> IN_PROGRESS -> PUBLISHED / FAILED, retry & circuit breaker.
+- Profile isolation: local/dev use stub producers (no external brokers required).
 
-Reactive Messaging: Kafka and ActiveMQ producers/consumers, reactive patterns for high throughput and non-blocking IO.
+Observability:
+- Micrometer metrics, composite registries, Prometheus endpoint.
+- OpenTelemetry tracing bridge with custom correlation & W3C traceparent support.
+- Structured logging (logstash encoder) and correlation id propagation.
 
-Webhooks: Secure, performant endpoints with HMAC verification and rate limiting.
+Testing:
+- Unit tests for outbox persistence, tracing header generation, JWT extended claims, rate limiting behavior.
+- Placeholder (disabled) DLQ test scaffold awaiting configurable embedded Kafka listener.
 
-Profiles & Environments: H2 for local/dev, PostgreSQL for production. Kafka/ActiveMQ configured for dev and prod separately.
+Profiles & Environments:
+- local | dev: H2 in‑memory, stub messaging, in-memory rate limiter.
+- test: H2 + disabled dispatcher sends, in-memory limiter, configurable topics.
+- prod: PostgreSQL (expected), real Kafka/ActiveMQ, Redis rate limiter, full dispatcher.
 
-Cloud-Native: Kubernetes-ready, graceful shutdown, and container-aware JVM tuning.
+Cloud-Native:
+- Graceful shutdown, boundedElastic offload for blocking I/O (JMS), container-ready image (Dockerfile), health & readiness endpoints.
 
 Prerequisites
 
@@ -34,6 +58,73 @@ IntelliJ IDEA / Gradle / Git
 Docker (for observability stack, Kafka, ActiveMQ, PostgreSQL in local/dev)
 
 Optional: Postman or curl for API testing
+
+Messaging Reliability Architecture
+
+1. Producers (Kafka / ActiveMQ)
+	- Inject correlationId and traceparent if absent.
+	- On Kafka send failure, automatic DLQ publish to `<topic><dlq-suffix>`.
+
+2. Consumers
+	- Extract correlation + traceparent to Reactor Context for downstream processing.
+	- ActiveMQ consumer sends failing messages (forced or exception) to configured DLQ destination with diagnostic headers.
+
+3. Transactional Outbox
+	- `OutboxPublisher.persistEvent(...)` writes NEW rows with JSON headers.
+	- `OutboxDispatcher` (non-local/dev) batches NEW -> IN_PROGRESS atomically, publishes with retry + circuit breaker, updates status & published_at.
+	- Supports dual-publish (Kafka + ActiveMQ) behind feature flags.
+
+4. Tracing
+	- `TracingHeaderUtil` ensures W3C `traceparent` header generation; reused across outbox, Kafka, ActiveMQ.
+
+Security Enhancements
+
+Implemented recommendations from security review:
+- Key rotation & previous key validation (`JwtUtil#validateWithRotation`).
+- Extended claim enforcement: token type=access, allowed client ids, min version.
+- Selective CSRF enabling via `security.csrf.enabled` property.
+- Enhanced rate limiting filter choosing user principal key over IP when authenticated.
+- Repository-backed credentials replacing demo static values; password hashing via DelegatingPasswordEncoder.
+
+Rate Limiting
+- Prod: Redis sliding window LUA script (precise) with ZSET pruning.
+- Dev/Test: InMemory limiter (low thresholds) enables deterministic 429 testing.
+
+Running Locally
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+Stubs prevent external Kafka/ActiveMQ/Redis requirements; H2 auto-initializes schema.
+
+Running Tests
+```bash
+./gradlew test
+```
+Tests cover JWT extended claims, outbox persistence, rate limiting (429), tracing headers.
+
+Configuration Highlights (selected)
+
+| Property | Purpose | Example |
+|----------|---------|---------|
+| security.jwt.secret / keys | JWT signing key(s) & rotation | `application-prod.yml` |
+| security.csrf.enabled | Toggle selective CSRF | false |
+| messaging.kafka.dlq-suffix | Kafka DLQ topic suffix | `-dlq` |
+| messaging.kafka.consumer.topic | Consumer topic (configurable) | `demo-topic` |
+| outbox.dispatch.enableKafka / enableActiveMq | Toggle outbox publishing targets | true/true |
+| outbox.dispatch.batchSize | Batch size per poll cycle | 25 |
+| outbox.dispatch.interval.ms | Poll interval | 5000 |
+| webhook.rate-limit / window | Rate limit & window (prod Redis) | 30 / 60s |
+
+Developer Tips
+- Use `local` profile for fastest startup (no external brokers).
+- Add new outbox event types via `persistEvent()` then rely on dispatcher.
+- For DLQ testing, make consumer topic configurable (already property-driven) and consider enabling embedded Kafka test.
+
+Planned / Optional Enhancements
+- Embedded Kafka DLQ integration test (enable placeholder).
+- Distinguish transient vs permanent outbox failures (no-retry classification).
+- Adopt OpenTelemetry automatic instrumentation for JMS & Kafka.
+- Persist structured header map (currently JSON) with schema evolution strategy.
 
 Quick Start
 Clone the repository

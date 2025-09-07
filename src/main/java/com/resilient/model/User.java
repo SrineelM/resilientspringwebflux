@@ -25,9 +25,11 @@ import org.springframework.data.relational.core.mapping.Table;
 public record User(
         @Id Long id,
         @NotBlank(message = "Username is required") @Size(min = 3, max = 50) String username,
-        @NotBlank(message = "Email is required") 
-        @Email(message = "Email should be valid", regexp = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$")
-        String email,
+        @NotBlank(message = "Email is required")
+                @Email(
+                        message = "Email should be valid",
+                        regexp = "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$")
+                String email,
         @NotBlank(message = "Full name is required") String fullName,
         UserStatus status,
         @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime createdAt,

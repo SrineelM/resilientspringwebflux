@@ -3,6 +3,7 @@ package com.resilient.controller;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
+import com.resilient.config.TestSecurityConfig;
 import com.resilient.security.ReactiveRateLimiter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,8 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-
-import com.resilient.config.TestSecurityConfig;
 
 @WebFluxTest(controllers = SecureWebhookController.class)
 @Import(TestSecurityConfig.class)

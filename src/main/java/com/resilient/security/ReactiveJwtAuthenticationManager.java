@@ -66,29 +66,32 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
 
         this.expectedIssuer = Objects.requireNonNull(expectedIssuer, "issuer must not be null")
                 .trim();
-    this.allowedAudiences = allowedAudiences != null
+        this.allowedAudiences = allowedAudiences != null
                 ? allowedAudiences.stream()
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())
                         .toList()
                 : Collections.emptyList();
-    this.allowedClientIds = allowedClientIds != null
-        ? allowedClientIds.stream().map(String::trim).filter(s -> !s.isEmpty()).toList()
-        : Collections.emptyList();
-    this.minTokenVersion = minTokenVersion;
+        this.allowedClientIds = allowedClientIds != null
+                ? allowedClientIds.stream()
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList()
+                : Collections.emptyList();
+        this.minTokenVersion = minTokenVersion;
     }
 
     @Override
     public Mono<Authentication> convert(ServerWebExchange exchange) {
         String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
-    if (!StringUtils.hasText(authHeader)) {
+        if (!StringUtils.hasText(authHeader)) {
             return Mono.empty();
         }
-    final String bearerHeader = authHeader; // local non-null after hasText check
-    if (bearerHeader == null || !bearerHeader.startsWith("Bearer ")) {
+        final String bearerHeader = authHeader; // local non-null after hasText check
+        if (bearerHeader == null || !bearerHeader.startsWith("Bearer ")) {
             return Mono.empty();
         }
-    String token = bearerHeader.substring(7).trim();
+        String token = bearerHeader.substring(7).trim();
         if (!StringUtils.hasText(token)) {
             return Mono.empty();
         }
@@ -124,7 +127,8 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
     private Mono<Authentication> validateAndCreateAuth(String token) {
         try {
             String username = jwtUtil.extractUsername(token);
-            boolean structuralValid = StringUtils.hasText(username) && (jwtUtil.validateToken(token, username) || jwtUtil.validateWithRotation(token));
+            boolean structuralValid = StringUtils.hasText(username)
+                    && (jwtUtil.validateToken(token, username) || jwtUtil.validateWithRotation(token));
             if (!structuralValid) {
                 return Mono.empty();
             }

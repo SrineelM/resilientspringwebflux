@@ -29,27 +29,28 @@ class DemoKafkaControllerTest {
                 .header("Authorization", "Bearer test-jwt-token")
                 .bodyValue("test-message")
                 .exchange()
-                .expectStatus().isAccepted()
+                .expectStatus()
+                .isAccepted()
                 .expectBody(String.class)
                 .isEqualTo("Message produced (simulated): test-message");
     }
 
     @Test
     void consumeMessages_happyPath() {
-    JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
+        JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
 
-    reactor.core.publisher.Flux<String> responseBody = webTestClient
-        .get()
-        .uri("/kafka/consume")
-        .header("Authorization", "Bearer test-jwt-token")
-        .accept(org.springframework.http.MediaType.TEXT_EVENT_STREAM)
-        .exchange()
-        .returnResult(String.class)
-        .getResponseBody();
+        reactor.core.publisher.Flux<String> responseBody = webTestClient
+                .get()
+                .uri("/kafka/consume")
+                .header("Authorization", "Bearer test-jwt-token")
+                .accept(org.springframework.http.MediaType.TEXT_EVENT_STREAM)
+                .exchange()
+                .returnResult(String.class)
+                .getResponseBody();
 
-    reactor.test.StepVerifier.create(responseBody.take(10))
-        .expectNextCount(10)
-        .verifyComplete();
+        reactor.test.StepVerifier.create(responseBody.take(10))
+                .expectNextCount(10)
+                .verifyComplete();
     }
     // ...existing code...
 }

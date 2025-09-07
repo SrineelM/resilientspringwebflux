@@ -1,18 +1,17 @@
 package com.resilient.security;
 
+import java.net.InetSocketAddress;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.NonNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
-import org.springframework.lang.NonNull;
 import reactor.core.publisher.Mono;
-
-import java.net.InetSocketAddress;
-import java.util.Optional;
 
 /**
  * Enhanced rate limiting supporting authenticated user key first, then IP fallback.
@@ -29,16 +28,14 @@ public class EnhancedRateLimitingWebFilter implements WebFilter {
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
-        return resolveKey(exchange)
-                .flatMap(key -> rateLimiter.isAllowed(key)
-                        .flatMap(allowed -> {
-                            if (Boolean.TRUE.equals(allowed)) {
-                                return chain.filter(exchange);
-                            }
-                            log.warn("Rate limit exceeded for key={}", key);
-                            exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-                            return exchange.getResponse().setComplete();
-                        }));
+        return resolveKey(exchange).flatMap(key -> rateLimiter.isAllowed(key).flatMap(allowed -> {
+            if (Boolean.TRUE.equals(allowed)) {
+                return chain.filter(exchange);
+            }
+            log.warn("Rate limit exceeded for key={}", key);
+            exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+            return exchange.getResponse().setComplete();
+        }));
     }
 
     private Mono<String> resolveKey(ServerWebExchange exchange) {

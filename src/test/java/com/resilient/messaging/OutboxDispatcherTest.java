@@ -9,16 +9,23 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-
 @ExtendWith(MockitoExtension.class)
 class OutboxDispatcherTest {
-    @Mock DatabaseClient db;
-    @Mock ReactiveKafkaProducer kafka;
-    @Mock ActiveMqProducerPort amq;
+    @Mock
+    DatabaseClient db;
 
-    @InjectMocks OutboxDispatcher dispatcher = new OutboxDispatcher(db, kafka, amq);
+    @Mock
+    ReactiveKafkaProducer kafka;
+
+    @Mock
+    ActiveMqProducerPort amq;
+
+    @InjectMocks
+    OutboxDispatcher dispatcher = new OutboxDispatcher(db, kafka, amq);
 
     // Minimal test: fetchNewEvents returns empty so dispatch finishes.
     @Test
-    void smoke() { StepVerifier.create(Mono.empty()).verifyComplete(); }
+    void smoke() {
+        StepVerifier.create(Mono.empty()).verifyComplete();
+    }
 }

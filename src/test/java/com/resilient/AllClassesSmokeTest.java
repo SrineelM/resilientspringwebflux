@@ -1,8 +1,5 @@
 package com.resilient;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,6 +7,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /**
  * Minimal effort happy-path coverage: attempts to load every compiled class in the com.resilient package.
@@ -30,21 +29,19 @@ class AllClassesSmokeTest {
 
         try (Stream<Path> paths = Files.walk(root)) {
             paths.filter(p -> p.toString().endsWith(".class"))
-                 .map(p -> root.relativize(p))
-                 .map(p -> p.toString()
-                         .replace(File.separatorChar, '.')
-                         .replaceAll("\\.class$", ""))
-                 .map(rel -> "com.resilient." + rel)
-                 .filter(name -> !name.contains("$")) // skip inner / synthetic classes for simplicity
-                 .distinct()
-                 .forEach(className -> {
-                     try {
-                         Class<?> cls = Class.forName(className);
-                         Assertions.assertNotNull(cls, className + " should load");
-                     } catch (Throwable t) {
-                         failures.add(className + " -> " + t.getClass().getSimpleName() + ": " + t.getMessage());
-                     }
-                 });
+                    .map(p -> root.relativize(p))
+                    .map(p -> p.toString().replace(File.separatorChar, '.').replaceAll("\\.class$", ""))
+                    .map(rel -> "com.resilient." + rel)
+                    .filter(name -> !name.contains("$")) // skip inner / synthetic classes for simplicity
+                    .distinct()
+                    .forEach(className -> {
+                        try {
+                            Class<?> cls = Class.forName(className);
+                            Assertions.assertNotNull(cls, className + " should load");
+                        } catch (Throwable t) {
+                            failures.add(className + " -> " + t.getClass().getSimpleName() + ": " + t.getMessage());
+                        }
+                    });
         }
 
         if (!failures.isEmpty()) {

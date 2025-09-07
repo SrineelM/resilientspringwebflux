@@ -14,6 +14,7 @@ public class JwtTestUtil {
     }
 
     public static void setupTokenGeneration(JwtUtil jwtUtil, String username, String token) {
-    Mockito.when(jwtUtil.generateToken(Mockito.eq(username), Mockito.anyMap())).thenReturn(token);
+        Mockito.when(jwtUtil.generateToken(Mockito.eq(username), Mockito.anyMap()))
+                .thenReturn(token);
     }
 }

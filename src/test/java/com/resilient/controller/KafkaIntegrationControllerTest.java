@@ -1,5 +1,8 @@
 package com.resilient.controller;
 
+import com.resilient.config.TestSecurityConfig;
+import com.resilient.security.JwtUtil;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
@@ -8,11 +11,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.test.StepVerifier;
-
-import java.time.Duration;
-
-import com.resilient.config.TestSecurityConfig;
-import com.resilient.security.JwtUtil;
 
 @WebFluxTest(controllers = KafkaIntegrationController.class)
 @Import(TestSecurityConfig.class)
@@ -29,7 +27,7 @@ class KafkaIntegrationControllerTest {
     void produce_happyPath() {
         // Setup JWT mock
         JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
-        
+
         webTestClient
                 .post()
                 .uri("/kafka/produce")
@@ -37,7 +35,8 @@ class KafkaIntegrationControllerTest {
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .bodyValue("{\"message\":\"test-message\"}")
                 .exchange()
-                .expectStatus().isAccepted()
+                .expectStatus()
+                .isAccepted()
                 .expectBody(String.class)
                 .isEqualTo("Message produced (simulated): test-message");
     }
@@ -46,14 +45,15 @@ class KafkaIntegrationControllerTest {
     void consumeMessages_happyPath() {
         // Setup JWT mock
         JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
-        
+
         var responseBody = webTestClient
                 .get()
                 .uri("/kafka/consume")
                 .header("Authorization", "Bearer test-jwt-token")
                 .accept(org.springframework.http.MediaType.TEXT_EVENT_STREAM)
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus()
+                .isOk()
                 .returnResult(String.class)
                 .getResponseBody();
 
@@ -69,7 +69,7 @@ class KafkaIntegrationControllerTest {
     void consumeMessages_happyPath_verifyPattern() {
         // Setup JWT mock
         JwtTestUtil.setupJwtMock(jwtUtil, "test-jwt-token", "testuser");
-        
+
         var responseBody = webTestClient
                 .get()
                 .uri("/kafka/consume")
@@ -86,6 +86,6 @@ class KafkaIntegrationControllerTest {
                 .verify(Duration.ofSeconds(5));
     }
 
-        // Note: Virtual time only works if the controller's Flux uses a TestScheduler or is written for virtual time.
-        // If not, this test will always timeout. Consider removing or refactoring controller for testability.
+    // Note: Virtual time only works if the controller's Flux uses a TestScheduler or is written for virtual time.
+    // If not, this test will always timeout. Consider removing or refactoring controller for testability.
 }

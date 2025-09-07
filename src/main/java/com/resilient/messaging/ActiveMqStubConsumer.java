@@ -2,13 +2,13 @@
 package com.resilient.messaging;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
-import java.util.Map;
-import java.util.UUID;
 
 @Component
 @Profile({"local", "dev"})
@@ -22,8 +22,11 @@ public class ActiveMqStubConsumer implements ActiveMqConsumerPort {
                         destination,
                         "Test message " + i + " for " + destination,
                         UUID.randomUUID().toString(),
-                        Map.of("stub","true")))
-                .doOnNext(record ->
-                        log.info("[STUB] ActiveMQ received dest={} correlationId={} msg={}", record.destination(), record.correlationId(), record.message()));
+                        Map.of("stub", "true")))
+                .doOnNext(record -> log.info(
+                        "[STUB] ActiveMQ received dest={} correlationId={} msg={}",
+                        record.destination(),
+                        record.correlationId(),
+                        record.message()));
     }
 }

@@ -9,14 +9,13 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 public class TestSecurityConfig {
     @Bean
     SecurityWebFilterChain testSecurityFilterChain(ServerHttpSecurity http) {
-        return http
-            .csrf(ServerHttpSecurity.CsrfSpec::disable)
-            .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-            .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-            .logout(ServerHttpSecurity.LogoutSpec::disable)
-            .requestCache(ServerHttpSecurity.RequestCacheSpec::disable)
-            .cors(ServerHttpSecurity.CorsSpec::disable)
-            .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
-            .build();
+        return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                .logout(ServerHttpSecurity.LogoutSpec::disable)
+                .requestCache(ServerHttpSecurity.RequestCacheSpec::disable)
+                .cors(ServerHttpSecurity.CorsSpec::disable)
+                .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
+                .build();
     }
 }

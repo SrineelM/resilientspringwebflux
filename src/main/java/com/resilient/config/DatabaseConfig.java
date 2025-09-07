@@ -28,7 +28,14 @@ import reactor.core.publisher.Mono;
 @Configuration
 public class DatabaseConfig {
 
-    /** Dev and Local profiles: Connection factory with H2 in-memory + connection pool. */
+    /**
+     * Configures an in-memory H2 database connection factory with a connection pool.
+     * This bean is only active for the "dev" and "local" profiles, providing a lightweight
+     * database for development and testing without external dependencies.
+     *
+     * @return A pooled {@link ConnectionFactory} for an H2 in-memory database.
+     * @see ConnectionPool
+     */
     @Bean
     @Profile({"dev", "local"})
     public ConnectionFactory h2ConnectionFactory() {
@@ -38,7 +45,16 @@ public class DatabaseConfig {
         return new ConnectionPool(config);
     }
 
-    /** Dev and Local profiles: schema.sql initializer for H2. */
+    /**
+     * Initializes the H2 database schema using the {@code schema.sql} script.
+     * This is intended for "dev" and "local" profiles to set up the database schema
+     * automatically on application startup. For production environments, a more robust
+     * migration tool like Flyway or Liquibase is recommended.
+     *
+     * @param h2ConnectionFactory The H2 connection factory to initialize.
+     * @return The {@link ConnectionFactoryInitializer} to be executed by Spring Boot.
+     * @see ResourceDatabasePopulator
+     */
     @Bean
     @Profile({"dev", "local"})
     public ConnectionFactoryInitializer h2Initializer(ConnectionFactory h2ConnectionFactory) {
@@ -48,7 +64,19 @@ public class DatabaseConfig {
         return initializer;
     }
 
-    /** Test and Production profiles: Postgres connection factory with connection pooling. */
+    /**
+     * Configures a PostgreSQL database connection factory with a connection pool.
+     * This bean is active for "test" and "prod" profiles, connecting to a PostgreSQL
+     * instance using credentials from the application properties.
+     *
+     * @param url      The R2DBC URL for the PostgreSQL database.
+     * @param username The database username.
+     * @param password The database password.
+     * @return A pooled {@link ConnectionFactory} for PostgreSQL.
+     * @see ConnectionFactoryOptions
+     * @see ConnectionPool
+     * @see Value
+     */
     @Bean
     @Profile({"test", "prod"})
     public ConnectionFactory postgresConnectionFactory(
@@ -68,7 +96,16 @@ public class DatabaseConfig {
         return new ConnectionPool(config);
     }
 
-    /** Dev and Local profiles: Reactive DB health indicator for H2. */
+    /**
+     * Provides a reactive health indicator for the database connection.
+     * This indicator is registered with the name "db" and is part of the Actuator's
+     * health endpoint. It verifies database connectivity by creating and closing a connection.
+     * This bean is configured for "dev" and "local" profiles.
+     *
+     * @param connectionFactory The connection factory to check.
+     * @return A {@link ReactiveHealthIndicator} for the database.
+     * @see ReactiveHealthIndicator
+     */
     @Bean(name = "db")
     @Profile({"dev", "local"})
     public ReactiveHealthIndicator reactiveDataSourceHealthIndicator(ConnectionFactory connectionFactory) {

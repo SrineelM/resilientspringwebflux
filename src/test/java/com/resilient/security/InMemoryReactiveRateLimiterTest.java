@@ -1,21 +1,6 @@
 package com.resilient.security;
 
 import org.junit.jupiter.api.Test;
-import reactor.test.StepVerifier;
-
-class InMemoryReactiveRateLimiterTest {
-    InMemoryReactiveRateLimiter limiter = new InMemoryReactiveRateLimiter();
-
-    @Test
-    void allowsBasic() {
-        StepVerifier.create(limiter.isAllowed("k"))
-                .expectNext(true)
-                .verifyComplete();
-    }
-}
-package com.resilient.security;
-
-import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import reactor.test.StepVerifier;

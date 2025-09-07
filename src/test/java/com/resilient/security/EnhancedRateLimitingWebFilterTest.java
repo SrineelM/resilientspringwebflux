@@ -1,5 +1,7 @@
 package com.resilient.security;
 
+import static org.mockito.Mockito.*;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,20 +12,24 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class EnhancedRateLimitingWebFilterTest {
-    @Mock ReactiveRateLimiter limiter;
-    @Mock WebFilterChain chain;
+    @Mock
+    ReactiveRateLimiter limiter;
 
-    @InjectMocks EnhancedRateLimitingWebFilter filter;
+    @Mock
+    WebFilterChain chain;
+
+    @InjectMocks
+    EnhancedRateLimitingWebFilter filter;
 
     @Test
     void passesWhenAllowed() {
         when(limiter.isAllowed(any())).thenReturn(Mono.just(true));
         when(chain.filter(any())).thenReturn(Mono.empty());
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/test").build());
+        MockServerWebExchange exchange =
+                MockServerWebExchange.from(MockServerHttpRequest.get("/test").build());
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
     }
 }

@@ -62,20 +62,20 @@ Optional: Postman or curl for API testing
 Messaging Reliability Architecture
 
 1. Producers (Kafka / ActiveMQ)
-	- Inject correlationId and traceparent if absent.
-	- On Kafka send failure, automatic DLQ publish to `<topic><dlq-suffix>`.
+    - Inject correlationId and traceparent if absent.
+    - On Kafka send failure, automatic DLQ publish to `<topic><dlq-suffix>`.
 
 2. Consumers
-	- Extract correlation + traceparent to Reactor Context for downstream processing.
-	- ActiveMQ consumer sends failing messages (forced or exception) to configured DLQ destination with diagnostic headers.
+    - Extract correlation + traceparent to Reactor Context for downstream processing.
+    - ActiveMQ consumer sends failing messages (forced or exception) to configured DLQ destination with diagnostic headers.
 
 3. Transactional Outbox
-	- `OutboxPublisher.persistEvent(...)` writes NEW rows with JSON headers.
-	- `OutboxDispatcher` (non-local/dev) batches NEW -> IN_PROGRESS atomically, publishes with retry + circuit breaker, updates status & published_at.
-	- Supports dual-publish (Kafka + ActiveMQ) behind feature flags.
+    - `OutboxPublisher.persistEvent(...)` writes NEW rows with JSON headers.
+    - `OutboxDispatcher` (non-local/dev) batches NEW -> IN_PROGRESS atomically, publishes with retry + circuit breaker, updates status & published_at.
+    - Supports dual-publish (Kafka + ActiveMQ) behind feature flags.
 
 4. Tracing
-	- `TracingHeaderUtil` ensures W3C `traceparent` header generation; reused across outbox, Kafka, ActiveMQ.
+    - `TracingHeaderUtil` ensures W3C `traceparent` header generation; reused across outbox, Kafka, ActiveMQ.
 
 Security Enhancements
 

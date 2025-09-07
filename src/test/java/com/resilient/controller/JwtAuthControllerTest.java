@@ -1,35 +1,31 @@
 package com.resilient.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import com.resilient.config.TestSecurityConfig;
 import com.resilient.security.JwtUtil;
 import com.resilient.security.TokenBlacklistService;
 import io.jsonwebtoken.Claims;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
-
 @WebFluxTest(controllers = JwtAuthController.class)
 @Import(TestSecurityConfig.class)
-@TestPropertySource(properties = {
-        "auth.demo.user=user",
-        "auth.demo.pass-hash=hashed-pass"
-})
+@TestPropertySource(properties = {"auth.demo.user=user", "auth.demo.pass-hash=hashed-pass"})
 class JwtAuthControllerTest {
 
     @Autowired
@@ -55,8 +51,7 @@ class JwtAuthControllerTest {
 
         // JWT generation & claims
         when(jwtUtil.generateToken(any(), any())).thenReturn("jwt-token");
-        when(jwtUtil.getExpiration("jwt-token"))
-                .thenReturn(new Date(System.currentTimeMillis() + 1000000));
+        when(jwtUtil.getExpiration("jwt-token")).thenReturn(new Date(System.currentTimeMillis() + 1000000));
 
         Claims claims = Mockito.mock(Claims.class);
         when(claims.getSubject()).thenReturn("user");
@@ -69,14 +64,17 @@ class JwtAuthControllerTest {
         when(claims.get("roles", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractAllClaims(any())).thenReturn(claims);
 
-        webTestClient.post()
+        webTestClient
+                .post()
                 .uri("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{\"username\":\"user\",\"password\":\"pass\"}")
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus()
+                .isOk()
                 .expectBody()
-                .jsonPath("$.token").isEqualTo("jwt-token");
+                .jsonPath("$.token")
+                .isEqualTo("jwt-token");
     }
 
     @Test
@@ -84,14 +82,17 @@ class JwtAuthControllerTest {
         // Password mismatch
         when(passwordEncoder.matches("wrong", "hashed-pass")).thenReturn(false);
 
-        webTestClient.post()
+        webTestClient
+                .post()
                 .uri("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{\"username\":\"user\",\"password\":\"wrong\"}")
                 .exchange()
-                .expectStatus().isUnauthorized()
+                .expectStatus()
+                .isUnauthorized()
                 .expectBody()
-                .jsonPath("$.error").isEqualTo("Invalid credentials");
+                .jsonPath("$.error")
+                .isEqualTo("Invalid credentials");
     }
 
     @Test
@@ -111,15 +112,15 @@ class JwtAuthControllerTest {
         when(jwtUtil.extractAllClaims(any())).thenReturn(claims);
 
         // Blacklist stub
-        when(jwtUtil.getRemainingValidity(any()))
-                .thenReturn(java.time.Duration.ofSeconds(60));
-        when(tokenBlacklistService.blacklistToken(any(), any()))
-                .thenReturn(Mono.empty());
+        when(jwtUtil.getRemainingValidity(any())).thenReturn(java.time.Duration.ofSeconds(60));
+        when(tokenBlacklistService.blacklistToken(any(), any())).thenReturn(Mono.empty());
 
-        webTestClient.post()
+        webTestClient
+                .post()
                 .uri("/api/auth/logout")
                 .header("Authorization", "Bearer jwt-token")
                 .exchange()
-                .expectStatus().isNoContent();
+                .expectStatus()
+                .isNoContent();
     }
 }

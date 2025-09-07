@@ -4,15 +4,15 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StringUtils;
-import reactor.util.context.ContextView;
 import reactor.core.publisher.Mono;
 import reactor.kafka.sender.KafkaSender;
 import reactor.kafka.sender.SenderOptions;
 import reactor.kafka.sender.SenderRecord;
+import reactor.util.context.ContextView;
 
 /**
  * ReactiveKafkaProducer is a service for sending messages to Kafka topics using Reactor Kafka.
@@ -39,8 +39,8 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
      *
      * @param kafkaSender the reactive Kafka sender bean
      */
-    public ReactiveKafkaProducer(KafkaSender<String, String> kafkaSender,
-                                 @Value("${messaging.kafka.dlq-suffix:-dlq}") String dlqSuffix) {
+    public ReactiveKafkaProducer(
+            KafkaSender<String, String> kafkaSender, @Value("${messaging.kafka.dlq-suffix:-dlq}") String dlqSuffix) {
         this.kafkaSender = kafkaSender;
         this.dlqSuffix = dlqSuffix;
     }
@@ -64,19 +64,29 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
     /**
      * Sends a message using explicit headers (bypasses Reactor Context extraction). Used by outbox dispatcher.
      */
-    public Mono<Void> sendWithHeaders(String topic, String value, java.util.Map<String,String> headers) {
+    public Mono<Void> sendWithHeaders(String topic, String value, java.util.Map<String, String> headers) {
         String safeValue = value == null ? "" : value.replaceAll("[\n\r]", "");
-    java.util.Map<String,String> traced = com.resilient.messaging.TracingHeaderUtil.ensureTracing(headers);
-        ProducerRecord<String,String> pr = new ProducerRecord<>(topic, null, safeValue);
-        traced.forEach((k,v) -> { if (v != null) pr.headers().add(k, v.getBytes()); });
-        SenderRecord<String,String,String> record = SenderRecord.create(pr, null);
-        return kafkaSender.send(Mono.just(record))
+        java.util.Map<String, String> traced = com.resilient.messaging.TracingHeaderUtil.ensureTracing(headers);
+        ProducerRecord<String, String> pr = new ProducerRecord<>(topic, null, safeValue);
+        traced.forEach((k, v) -> {
+            if (v != null) pr.headers().add(k, v.getBytes());
+        });
+        SenderRecord<String, String, String> record = SenderRecord.create(pr, null);
+        return kafkaSender
+                .send(Mono.just(record))
                 .doOnNext(result -> {
-                    if (result.exception()==null) {
+                    if (result.exception() == null) {
                         RecordMetadata md = result.recordMetadata();
-                        logger.debug("Kafka outbox send topic={} offset={} headers={} bytes={}", md.topic(), md.offset(), traced.keySet(), safeValue.length());
+                        logger.debug(
+                                "Kafka outbox send topic={} offset={} headers={} bytes={}",
+                                md.topic(),
+                                md.offset(),
+                                traced.keySet(),
+                                safeValue.length());
                     } else {
-                        logger.error("Kafka outbox send error: {}", result.exception().getMessage());
+                        logger.error(
+                                "Kafka outbox send error: {}",
+                                result.exception().getMessage());
                     }
                 })
                 .then();
@@ -98,12 +108,17 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
         }
 
         SenderRecord<String, String, String> record = SenderRecord.create(producerRecord, key);
-        return kafkaSender.send(Mono.just(record))
+        return kafkaSender
+                .send(Mono.just(record))
                 .doOnNext(result -> {
                     RecordMetadata metadata = result.recordMetadata();
                     if (result.exception() == null) {
-                        logger.info("Kafka message sent: topic={}, partition={}, offset={}, corrId={}",
-                                metadata.topic(), metadata.partition(), metadata.offset(), correlationId);
+                        logger.info(
+                                "Kafka message sent: topic={}, partition={}, offset={}, corrId={}",
+                                metadata.topic(),
+                                metadata.partition(),
+                                metadata.offset(),
+                                correlationId);
                     } else {
                         logger.error("Kafka send error: {}", result.exception().getMessage());
                     }
@@ -122,7 +137,11 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
     }
 
     private String getContextValue(ContextView ctx, String key) {
-        try { return ctx.hasKey(key) ? String.valueOf(ctx.get(key)) : null; } catch (Exception e) { return null; }
+        try {
+            return ctx.hasKey(key) ? String.valueOf(ctx.get(key)) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Enhanced KafkaSender bean with replication.factor property for reliability

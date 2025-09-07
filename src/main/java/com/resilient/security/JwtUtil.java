@@ -1,23 +1,23 @@
 package com.resilient.security;
 
+import com.resilient.security.secrets.SecretProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
-import com.resilient.security.secrets.SecretProvider;
-import jakarta.annotation.PostConstruct;
-import java.util.ArrayList;
 
 /**
  * JwtUtil: token generation & parsing with issuer/audience and TTL helpers. Uses HS256; ensure a
@@ -46,9 +46,7 @@ public class JwtUtil {
         this.secretProvider = secretProvider;
         if (secretProvider != null) {
             this.secret = secretProvider.currentJwtSecret();
-            this.keys = secretProvider.previousJwtSecrets().isEmpty()
-                    ? List.of(secret)
-                    : buildKeyList(secretProvider);
+            this.keys = secretProvider.previousJwtSecrets().isEmpty() ? List.of(secret) : buildKeyList(secretProvider);
         }
     }
 
@@ -178,13 +176,13 @@ public class JwtUtil {
             Claims claims = extractAllClaims(token);
             Date exp = claims.getExpiration();
             String iss = claims.getIssuer();
-            
+
             // Check expiration
             if (exp == null || exp.before(new Date())) return false;
-            
+
             // Check issuer
             if (!Objects.equals(issuer, iss)) return false;
-            
+
             // Check audience (if configured)
             if (audience != null && !audience.isEmpty()) {
                 Object aud = claims.get("aud");
@@ -199,7 +197,7 @@ public class JwtUtil {
                 }
                 return false;
             }
-            
+
             return true;
         } catch (Exception e) {
             return false;
@@ -212,7 +210,9 @@ public class JwtUtil {
         if (keys == null || keys.size() <= 1) return false;
         for (int i = 1; i < keys.size(); i++) {
             try {
-                JwtParser parser = Jwts.parser().verifyWith((javax.crypto.SecretKey) toKey(keys.get(i))).build();
+                JwtParser parser = Jwts.parser()
+                        .verifyWith((javax.crypto.SecretKey) toKey(keys.get(i)))
+                        .build();
                 parser.parseSignedClaims(token); // will throw if invalid
                 return true;
             } catch (Exception ignore) {

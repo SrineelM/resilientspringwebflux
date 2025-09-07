@@ -18,8 +18,12 @@ import reactor.core.scheduler.Scheduler;
 /**
  * Adapter implementation for sending notifications to users.
  *
- * <p>Uses Resilience4j annotations for circuit breaking, retry, and bulkhead isolation. Simulates a
- * notification service with random failures and delays for demonstration.
+ * <p>This class is a "secondary" or "driven" adapter in Hexagonal Architecture. It implements the
+ * UserNotificationPort and encapsulates the logic for interacting with an external notification
+ * service.
+ *
+ * <p>It uses Resilience4j annotations for circuit breaking, retry, and bulkhead isolation, and
+ * simulates a flaky notification service with random failures and delays for demonstration.
  */
 @Service
 public class NotificationAdapter implements UserNotificationPort {
@@ -31,7 +35,8 @@ public class NotificationAdapter implements UserNotificationPort {
     /**
      * Constructs a NotificationAdapter with a specific Reactor scheduler.
      *
-     * @param scheduler the scheduler to use for async notification tasks
+     * @param scheduler The scheduler to use for async notification tasks, injected via @Qualifier to
+     *     ensure a dedicated thread pool for notification operations.
      */
     public NotificationAdapter(@Qualifier("notificationScheduler") Scheduler scheduler) {
         this.scheduler = scheduler;
@@ -40,10 +45,18 @@ public class NotificationAdapter implements UserNotificationPort {
     /**
      * Sends a welcome notification to the given user.
      *
-     * <p>This method is protected by circuit breaker, retry, and bulkhead patterns. It simulates
-     * random failures and artificial latency for demonstration purposes.
+     * <p>This method is protected by several resilience patterns:
      *
-     * @param user the user to notify
+     * <ul>
+     *   <li><b>@CircuitBreaker:</b> If the notification service fails repeatedly, the circuit will
+     *       "open" and immediately fail-fast by calling the fallback method, preventing system
+     *       overload.
+     *   <li><b>@Retry:</b> Automatically retries the operation on transient failures.
+     *   <li><b>@Bulkhead:</b> Limits the number of concurrent calls to this method, preventing it
+     *       from consuming all available threads.
+     * </ul>
+     *
+     * @param user The user to notify.
      * @return a Mono emitting a success message or error
      */
     @Override
@@ -58,19 +71,32 @@ public class NotificationAdapter implements UserNotificationPort {
                             correlationId,
                             user.username(),
                             prefs.channel());
+                    // Simulate a 30% chance of failure to test retry and circuit breaker logic.
                     if (random.nextDouble() < 0.3)
                         throw new RuntimeException("Notification service temporarily unavailable");
+                    // On success, return a result with a unique message ID.
                     return NotificationResult.ok(java.util.UUID.randomUUID().toString());
                 })
+                // Simulate network latency with a random delay.
                 .delayElement(java.time.Duration.ofMillis(random.nextInt(1000) + 500))
+                // Offload the execution to a dedicated scheduler to avoid blocking the calling thread.
                 .subscribeOn(scheduler)
                 .doOnSuccess(result -> log.info("Notification sent successfully: {}", result))
                 .doOnError(error -> log.error("Failed to send notification", error));
     }
 
+    /**
+     * Sends a status update notification. Also protected by resilience patterns.
+     *
+     * @param correlationId for distributed tracing
+     * @param user the user to notify
+     * @param status the new status to report
+     * @param metadata additional data for the notification
+     * @return a Mono emitting a success or failure result
+     */
     @Override
     @CircuitBreaker(name = "notificationService", fallbackMethod = "fallbackSendStatus")
-    @Retry(name = "notificationService")
+    @Retry(name = "notificationService") // Uses the same retry configuration as the welcome notification.
     @Bulkhead(name = "notificationService")
     public Mono<NotificationResult> sendStatusUpdate(
             String correlationId, User user, String status, java.util.Map<String, Object> metadata) {
@@ -80,19 +106,38 @@ public class NotificationAdapter implements UserNotificationPort {
                             correlationId,
                             status,
                             user.username());
+                    // Simulate a 20% chance of failure.
                     if (random.nextDouble() < 0.2) throw new RuntimeException("Notification service error");
                     return NotificationResult.ok(java.util.UUID.randomUUID().toString());
                 })
+                // Simulate network latency.
                 .delayElement(java.time.Duration.ofMillis(random.nextInt(800) + 200))
+                // Offload to the dedicated scheduler.
                 .subscribeOn(scheduler);
     }
 
+    /**
+     * Fallback method for {@link #sendWelcomeNotification}.
+     *
+     * <p>This method is invoked by the CircuitBreaker when it is open or when a call fails after
+     * all retries have been exhausted. It logs the failure and returns a 'queued' status,
+     * indicating that the notification could be processed later by a background job.
+     *
+     * @param user The original user parameter.
+     * @param prefs The original preferences parameter.
+     * @param ex The exception that triggered the fallback.
+     * @return A Mono with a 'failed' NotificationResult, indicating graceful degradation.
+     */
     public Mono<NotificationResult> fallbackSendWelcome(
             String correlationId, User user, NotificationPreferences prefs, Exception ex) {
         log.warn("Using fallback for welcome notification for user: {}, error: {}", user.username(), ex.getMessage());
         return Mono.just(NotificationResult.failed("queued"));
     }
 
+    /**
+     * Fallback method for {@link #sendStatusUpdate}.
+     * @return A Mono with a 'failed' NotificationResult.
+     */
     public Mono<NotificationResult> fallbackSendStatus(
             String correlationId, User user, String status, java.util.Map<String, Object> metadata, Exception ex) {
         log.warn("Using fallback for status notification for user: {}, error: {}", user.username(), ex.getMessage());

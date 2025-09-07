@@ -24,9 +24,9 @@ spotless {
     }
 }
 
-// Ensure Spotless formatting is applied automatically before building.
-// This will reformat files in-place and allow the build to proceed without failing.
-tasks.named('build') {
+// Ensure Spotless formatting is applied automatically before compilation.
+// This will reformat files in-place, allowing the build to proceed without formatting errors.
+tasks.withType(JavaCompile) {
     dependsOn 'spotlessApply'
 }
 

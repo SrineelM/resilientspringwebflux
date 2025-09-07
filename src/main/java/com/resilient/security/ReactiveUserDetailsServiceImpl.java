@@ -15,24 +15,24 @@ public class ReactiveUserDetailsServiceImpl implements ReactiveUserDetailsServic
 
     private final UserCredentialsRepository repo;
 
-    public ReactiveUserDetailsServiceImpl(UserCredentialsRepository repo) { this.repo = repo; }
+    public ReactiveUserDetailsServiceImpl(UserCredentialsRepository repo) {
+        this.repo = repo;
+    }
 
     @Override
     public Mono<UserDetails> findByUsername(String username) {
-        return repo.findByUsername(username)
-                .filter(UserCredentials::enabled)
-                .map(uc -> {
-                    List<String> roles = uc.roles() == null || uc.roles().isBlank()
-                            ? List.of("USER")
-                            : Arrays.stream(uc.roles().split(","))
-                                    .map(String::trim)
-                                    .filter(s -> !s.isEmpty())
-                                    .collect(Collectors.toList());
-                    return User.withUsername(uc.username())
-                            .password(uc.passwordHash())
-                            .roles(roles.toArray(new String[0]))
-                            .disabled(!uc.enabled())
-                            .build();
-                });
+        return repo.findByUsername(username).filter(UserCredentials::enabled).map(uc -> {
+            List<String> roles = uc.roles() == null || uc.roles().isBlank()
+                    ? List.of("USER")
+                    : Arrays.stream(uc.roles().split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.toList());
+            return User.withUsername(uc.username())
+                    .password(uc.passwordHash())
+                    .roles(roles.toArray(new String[0]))
+                    .disabled(!uc.enabled())
+                    .build();
+        });
     }
 }

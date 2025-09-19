@@ -1,5 +1,7 @@
 package com.resilient.messaging;
 
+import java.util.Map;
+
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
@@ -66,7 +68,7 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
      */
     public Mono<Void> sendWithHeaders(String topic, String value, java.util.Map<String, String> headers) {
         String safeValue = value == null ? "" : value.replaceAll("[\n\r]", "");
-        java.util.Map<String, String> traced = com.resilient.messaging.TracingHeaderUtil.ensureTracing(headers);
+        Map<String, String> traced = TracingHeaderUtil.ensureTracing(headers);
         ProducerRecord<String, String> pr = new ProducerRecord<>(topic, null, safeValue);
         traced.forEach((k, v) -> {
             if (v != null) pr.headers().add(k, v.getBytes());

@@ -110,7 +110,8 @@ public class SecureWebhookController {
                     return signatureValidator
                             .validateStaticSecret(headers)
                             // Then, validate the HMAC signature of the payload.
-                            // The payload processing is moved to a bounded elastic scheduler to avoid blocking the event loop.
+                            // The payload processing is moved to a bounded elastic scheduler to avoid blocking the
+                            // event loop.
                             .then(payload.publishOn(Schedulers.boundedElastic()).flatMap(body -> signatureValidator
                                     .validateHmacSignature(body, headers.getOrDefault("x-webhook-signature", ""))
                                     // If all validations pass, proceed to the actual business logic.
@@ -144,15 +145,16 @@ public class SecureWebhookController {
     private Mono<Void> processWebhookPayload(String payload) {
         // Wrap potentially blocking business logic in a Mono.
         return Mono.fromRunnable(() -> {
-            // Log a truncated version of the payload for diagnostics.
-            log.info("Processing webhook payload: {}", payload.substring(0, Math.min(100, payload.length())));
+                    // Log a truncated version of the payload for diagnostics.
+                    log.info("Processing webhook payload: {}", payload.substring(0, Math.min(100, payload.length())));
 
-            // Example processing - replace with your business logic
-            // - Parse JSON payload
-            // - Validate event type
-            // - Store event in database
-            // - Send notifications
-            // - Update external systems
-        }).then(); // `then()` returns a Mono<Void> that completes when the Runnable is done.
+                    // Example processing - replace with your business logic
+                    // - Parse JSON payload
+                    // - Validate event type
+                    // - Store event in database
+                    // - Send notifications
+                    // - Update external systems
+                })
+                .then(); // `then()` returns a Mono<Void> that completes when the Runnable is done.
     }
 }

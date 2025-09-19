@@ -41,10 +41,21 @@ management:
         readiness:
           include: db
   tracing:
+    # Sample 100% of traces in dev/local (reduce to 0.1 for production)
     sampling:
       probability: 1.0
+    # Use W3C Trace Context propagation standard (traceparent/tracestate headers)
     propagation:
       type: W3C
+    # Micrometer Baggage Configuration for Cross-Service Context Propagation
+    baggage:
+      # Remote fields: Keys that are propagated across service boundaries via W3C Baggage headers
+      # These values will be automatically included in outgoing HTTP requests and received from upstream
+      remote-fields: correlationId, userId, tenantId
+      # Correlation fields: Keys that are automatically added to MDC for logging correlation
+      # These will appear in log statements alongside traceId and spanId for easier debugging
+      correlation:
+        fields: correlationId, userId, tenantId
   zipkin:
     endpoint: http://zipkin:9411/api/v2/spans
   # Observability configuration

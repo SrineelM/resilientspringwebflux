@@ -63,7 +63,8 @@ public class ReactiveStreamController {
                 .take(10)
                 // Transform each emitted number into a new UserResponse object.
                 .map(i -> UserResponse.from(User.create("User" + i, "user" + i + "@example.com", "User " + i)))
-                // If the client (subscriber) cannot process items as fast as they are produced, drop the item and log a warning.
+                // If the client (subscriber) cannot process items as fast as they are produced, drop the item and log a
+                // warning.
                 .onBackpressureDrop(user -> log.warn("Dropping user due to backpressure: {}", user.username()))
                 // Set a 2-minute timeout for the entire stream to prevent it from running indefinitely.
                 .timeout(Duration.ofMinutes(2))
@@ -85,7 +86,8 @@ public class ReactiveStreamController {
         return Flux.range(1, 10)
                 // Transform each number into a new UserResponse object.
                 .map(i -> UserResponse.from(User.create("User" + i, "user" + i + "@example.com", "User " + i)))
-                // If the client can't keep up, buffer up to `bufferSize` items. If the buffer fills, drop the latest item.
+                // If the client can't keep up, buffer up to `bufferSize` items. If the buffer fills, drop the latest
+                // item.
                 .onBackpressureBuffer(bufferSize, v -> {}, reactor.core.publisher.BufferOverflowStrategy.DROP_LATEST)
                 // Set a 2-minute timeout for the entire stream.
                 .timeout(Duration.ofMinutes(2))

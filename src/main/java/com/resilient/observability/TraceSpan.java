@@ -1,3 +1,18 @@
+/**
+ * Annotation for marking methods to be traced as spans in distributed tracing systems.
+ * <p>
+ * When applied to a method, this annotation can be used by AOP or instrumentation frameworks
+ * to automatically create and manage a tracing span for the method execution. The annotation
+ * supports customizing the span name, operation, tags, and whether to record method arguments.
+ * <p>
+ * Example usage:
+ * <pre>
+ * {@code
+ * @TraceSpan(value = "user.create", operation = "createUser", tags = "role:admin", recordArgs = true)
+ * public void createUser(User user) { ... }
+ * }
+ * </pre>
+ */
 package com.resilient.observability;
 
 import java.lang.annotation.*;

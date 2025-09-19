@@ -61,7 +61,9 @@ public class UserManagementController {
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can create users.
-    @CircuitBreaker(name = "user-service", fallbackMethod = "createUserFallback") // Resilience: Isolates from repeated failures.
+    @CircuitBreaker(
+            name = "user-service",
+            fallbackMethod = "createUserFallback") // Resilience: Isolates from repeated failures.
     @TimeLimiter(name = "user-service") // Resilience: Prevents requests from waiting indefinitely.
     public Mono<ResponseEntity<UserResponse>> createUser(@Valid @RequestBody UserRequest request) {
         log.info("Creating user with username: {}", request.username());

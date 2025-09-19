@@ -76,7 +76,8 @@ public class CustomReactiveHealthIndicator implements ReactiveHealthIndicator {
                         },
                         conn -> conn.close()) // 3. Release the connection when the inner Mono completes.
                 .timeout(timeout) // Apply a timeout to the entire operation.
-                .doOnSuccess(h -> log.debug("DB health check passed in {} ms", (System.nanoTime() - start) / 1_000_000L))
+                .doOnSuccess(
+                        h -> log.debug("DB health check passed in {} ms", (System.nanoTime() - start) / 1_000_000L))
                 .onErrorResume(ex -> {
                     // If any error occurs (e.g., timeout, connection failure), build a DOWN response.
                     log.error("DB health check failed", ex);

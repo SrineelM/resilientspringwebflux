@@ -39,10 +39,8 @@ public class GlobalExceptionHandler {
 
     /** Handles JSON processing errors and returns a 400 response. */
     @ExceptionHandler(JsonProcessingRuntimeException.class)
-    public Mono<ResponseEntity<ErrorResponse>> handleJsonProcessingRuntimeException(
-            JsonProcessingRuntimeException ex) {
-        return buildErrorResponse(
-                HttpStatus.BAD_REQUEST, "JSON_PROCESSING_ERROR", ex.getMessage(), ex, false);
+    public Mono<ResponseEntity<ErrorResponse>> handleJsonProcessingRuntimeException(JsonProcessingRuntimeException ex) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "JSON_PROCESSING_ERROR", ex.getMessage(), ex, false);
     }
 
     /** Handles DTO validation failures (@Valid) and returns a 400 response with field errors. */

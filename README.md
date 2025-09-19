@@ -37,6 +37,25 @@ Observability:
 - OpenTelemetry tracing bridge with custom correlation & W3C traceparent support.
 - Structured logging (logstash encoder) and correlation id propagation.
 
+Micrometer Baggage (How-To)
+---------------------------
+This project demonstrates propagating custom context using W3C Baggage via Micrometer/OpenTelemetry.
+
+- Configure baggage keys in `application.yml`:
+    - `management.tracing.baggage.remote-fields`: correlationId, userId, tenantId
+    - `management.tracing.baggage.correlation.fields`: correlationId, userId, tenantId (adds to MDC/logs)
+- Send headers on incoming requests:
+    - `X-Correlation-Id`, `X-User-Id`, `X-Tenant-Id`
+- The `BaggageHeaderFilter` maps these headers into OTel Baggage so they propagate downstream, and also
+    puts them into Reactor Context for easy access in reactive code.
+- Read values in code via Reactor Context or Tracer baggage (example):
+    - Reactor Context: `Mono.deferContextual(ctx -> Mono.just(ctx.getOrDefault("correlationId", "N/A")))`
+    - Micrometer Tracer: `tracer.getBaggage("correlationId").get()` (if a span/scope exists)
+
+Try it:
+- Call any endpoint with headers and observe logs include `correlationId` and tracing shows baggage keys.
+- Example headers: `X-Correlation-Id: demo-123`, `X-User-Id: alice`, `X-Tenant-Id: acme`.
+
 Testing:
 - Unit tests for outbox persistence, tracing header generation, JWT extended claims, rate limiting behavior.
 - Placeholder (disabled) DLQ test scaffold awaiting configurable embedded Kafka listener.
@@ -48,6 +67,21 @@ Profiles & Environments:
 
 Cloud-Native:
 - Graceful shutdown, boundedElastic offload for blocking I/O (JMS), container-ready image (Dockerfile), health & readiness endpoints.
+
+
+Code Documentation & Educational Value
+--------------------------------------
+All Java source files in this project are thoroughly documented with:
+- Class-level Javadocs explaining the purpose and context of each class or interface.
+- Method-level Javadocs describing parameters, return values, and behavior.
+- Inline comments clarifying key logic, design decisions, and best practices.
+
+This makes the codebase highly accessible for beginners and new contributors, serving as a learning resource for:
+- Spring WebFlux, reactive programming, and modern Java idioms
+- Security, messaging, and observability patterns
+- Clean/hexagonal architecture and testable design
+
+If you are new to the project, you can browse any Java file to find clear explanations of its role and implementation details.
 
 Prerequisites
 

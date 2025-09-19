@@ -1,7 +1,6 @@
 package com.resilient.messaging;
 
 import java.util.Map;
-
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;

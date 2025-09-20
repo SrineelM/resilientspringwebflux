@@ -70,33 +70,65 @@ public class JwtUtil {
     }
 
     @PostConstruct
+    /**
+     * Initializes the `keys` list if it hasn't been set by a {@link SecretProvider} or configuration.
+     * Ensures that even with a single `secret` property, there's a list to work with.
+     */
     void init() {
         // Ensure key list initialized even if setSecretProvider came before property binding
         if (this.keys == null && this.secret != null) {
             this.keys = List.of(this.secret);
         }
     }
-
+    /**
+     * Sets the issuer claim for JWTs.
+     * @param issuer The issuer string.
+     */
     public void setIssuer(String issuer) {
         this.issuer = issuer;
     }
 
+    /**
+     * Sets the audience claim for JWTs.
+     * @param audience A list of audience strings.
+     */
     public void setAudience(List<String> audience) {
         this.audience = audience;
     }
 
+    /**
+     * Sets the time-to-live (TTL) for generated JWTs.
+     * @param ttlSeconds The TTL in seconds.
+     */
     public void setTtlSeconds(long ttlSeconds) {
         this.ttlSeconds = ttlSeconds;
     }
 
+    /**
+     * Sets the list of rotating keys. This property is typically populated via
+     * `@ConfigurationProperties` if keys are defined directly in application properties.
+     * If a {@link SecretProvider} is used, this property might be overridden.
+     *
+     * @param keys A list of secret key strings.
+     */
     public void setKeys(List<String> keys) { // populated via configuration if provided
         this.keys = keys;
     }
 
+    /**
+     * Sets the maximum session duration for refresh token logic.
+     * @param maxSessionSeconds The maximum session duration in seconds.
+     */
     public void setMaxSessionSeconds(long maxSessionSeconds) {
         this.maxSessionSeconds = maxSessionSeconds;
     }
 
+    /**
+     * Retrieves the current active signing key.
+     * It prioritizes the `keys` list (first element) if available, otherwise falls back to the `secret` field.
+     *
+     * @return The {@link Key} object for signing.
+     */
     private Key getKey() {
         if (keys != null && !keys.isEmpty()) {
             return toKey(keys.get(0));
@@ -104,6 +136,15 @@ public class JwtUtil {
         return toKey(secret);
     }
 
+    /**
+     * Converts a secret string into a {@link Key} object suitable for JWT signing.
+     * It attempts to decode the string as Base64 first; if that fails, it treats it as a plain string.
+     * Enforces a minimum key length of 256 bits (32 bytes) for HS256.
+     *
+     * @param value The secret string (Base64 encoded or plain).
+     * @return The generated {@link Key}.
+     * @throws IllegalStateException if the key is too short.
+     */
     private Key toKey(String value) {
         byte[] bytes;
         try {
@@ -115,7 +156,14 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(bytes);
     }
 
-    /** Generate a JWT with subject, iss, aud(list), iat, exp, and custom claims. */
+    /**
+     * Generates a new JWT with the specified subject, issuer, audience, issued-at time,
+     * expiration time, and any additional custom claims.
+     *
+     * @param subject The subject (user identifier) of the token.
+     * @param extraClaims A map of additional claims to include in the token payload.
+     * @return The compact, signed JWT string.
+     */
     public String generateToken(String subject, Map<String, Object> extraClaims) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(ttlSeconds);
@@ -130,7 +178,12 @@ public class JwtUtil {
         return builder.compact();
     }
 
-    /** Generate a refresh token with longer expiration. */
+    /**
+     * Generates a refresh token with a longer expiration time (24 times the standard TTL).
+     *
+     * @param subject The subject (user identifier) of the token.
+     * @return The compact, signed refresh token string.
+     */
     public String generateRefreshToken(String subject) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(ttlSeconds * 24);
@@ -143,16 +196,33 @@ public class JwtUtil {
                 .compact();
     }
 
+    /**
+     * Extracts the subject (username) from a given JWT.
+     *
+     * @param token The JWT string.
+     * @return The username (subject) from the token.
+     * @throws io.jsonwebtoken.JwtException if the token is invalid or malformed.
+     */
     public String extractUsername(String token) {
         return extractAllClaims(token).getSubject();
     }
 
+    /**
+     * Extracts all claims (payload) from a given JWT.
+     *
+     * @param token The JWT string.
+     * @return The {@link Claims} object containing all claims.
+     * @throws io.jsonwebtoken.JwtException if the token is invalid or malformed.
+     */
     public Claims extractAllClaims(String token) {
         JwtParser parser =
                 Jwts.parser().verifyWith((javax.crypto.SecretKey) getKey()).build();
         return parser.parseSignedClaims(token).getPayload();
     }
 
+    /**
+     * Validates a JWT against a specific expected username, its signature, expiration, and issuer.
+     */
     public boolean validateToken(String token, String expectedUsername) {
         try {
             Claims claims = extractAllClaims(token);
@@ -168,8 +238,11 @@ public class JwtUtil {
     }
 
     /**
-     * Validates the token structure, signature, expiration, issuer, and audience
-     * without requiring a specific username
+     * Validates the token's signature, expiration, issuer, and audience.
+     * This method does not require an `expectedUsername` and is useful for general token validity checks.
+     *
+     * @param token The JWT string.
+     * @return {@code true} if the token is valid, {@code false} otherwise.
      */
     public boolean validateToken(String token) {
         try {
@@ -204,7 +277,14 @@ public class JwtUtil {
         }
     }
 
-    /** Attempt validation with previous keys (rotation support). */
+    /**
+     * Attempts to validate a JWT, first with the current active key, and if that fails,
+     * then with any configured previous keys. This supports seamless key rotation.
+     *
+     * @param token The JWT string.
+     * @return {@code true} if the token is valid with any of the configured keys,
+     *         {@code false} otherwise.
+     */
     public boolean validateWithRotation(String token) {
         if (validateToken(token)) return true; // fast path with current key
         if (keys == null || keys.size() <= 1) return false;
@@ -222,7 +302,15 @@ public class JwtUtil {
         return false;
     }
 
-    /** Refresh a token (sliding window) preserving original_iat within maxSessionSeconds boundary. */
+    /**
+     * Refreshes an existing JWT by issuing a new one with an updated expiration time.
+     * This implements a "sliding window" session management: the session is extended,
+     * but an absolute maximum session duration (from the original issued-at time) is enforced.
+     *
+     * @param token The existing JWT to refresh.
+     * @return A new, refreshed JWT string.
+     * @throws IllegalStateException if the token is expired or the maximum session duration is exceeded.
+     */
     public String refreshToken(String token) {
         Claims claims = extractAllClaims(token);
         Date exp = claims.getExpiration();
@@ -231,10 +319,12 @@ public class JwtUtil {
         }
         Instant now = Instant.now();
         Date originalIat = claims.get("original_iat", Date.class);
+        // If 'original_iat' claim is not present, use the token's 'issuedAt' as the original.
         if (originalIat == null) {
             originalIat = claims.getIssuedAt();
         }
         if (maxSessionSeconds > 0 && (now.toEpochMilli() - originalIat.getTime()) / 1000 > maxSessionSeconds) {
+            // Enforce maximum session duration.
             throw new IllegalStateException("Session max duration exceeded");
         }
         // Build new token with new exp & iat but preserved original_iat
@@ -245,17 +335,30 @@ public class JwtUtil {
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(newExp))
                 .signWith(getKey());
+        // Add audience claim if configured.
         if (audience != null && !audience.isEmpty()) builder.claim("aud", audience);
+        // Copy all other claims from the original token, except standard ones that are being re-generated.
         claims.forEach((k, v) -> {
             if (!List.of("sub", "iss", "aud", "iat", "exp").contains(k)) {
                 builder.claim(k, v);
             }
         });
+        // Ensure the 'original_iat' claim is present in the new token.
         builder.claim("original_iat", originalIat);
         return builder.compact();
     }
 
-    /** Additional strict validation hook for extended claims. */
+    /**
+     * Provides an additional strict validation hook for extended claims within a JWT.
+     * This allows for custom business logic validation beyond standard JWT checks.
+     *
+     * @param token The JWT string.
+     * @param allowedClientIds An optional list of client IDs that are allowed. If null or empty,
+     *                         this check is skipped.
+     * @param minVersion The minimum allowed version for the 'version' claim. If 0, this check is skipped.
+     * @return {@code true} if all extended claims pass validation or are not configured for validation,
+     *         {@code false} otherwise.
+     */
     public boolean validateExtendedClaims(String token, List<String> allowedClientIds, int minVersion) {
         try {
             Claims claims = extractAllClaims(token);
@@ -274,7 +377,13 @@ public class JwtUtil {
         }
     }
 
-    /** Remaining validity until expiration; zero/negative if expired or invalid. */
+    /**
+     * Calculates the remaining validity duration of a JWT until its expiration.
+     *
+     * @param token The JWT string.
+     * @return A {@link Duration} representing the remaining time. Returns {@link Duration#ZERO}
+     *         if the token is already expired or invalid.
+     */
     public Duration getRemainingValidity(String token) {
         try {
             Date exp = extractAllClaims(token).getExpiration();
@@ -285,7 +394,12 @@ public class JwtUtil {
         }
     }
 
-    /** Convenience for clients/tests. */
+    /**
+     * Retrieves the expiration {@link Date} from a JWT.
+     *
+     * @param token The JWT string.
+     * @return The expiration {@link Date}.
+     */
     public Date getExpiration(String token) {
         return extractAllClaims(token).getExpiration();
     }

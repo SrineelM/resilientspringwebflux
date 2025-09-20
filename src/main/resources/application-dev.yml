@@ -1,75 +1,88 @@
 # --------------------------------------------------------
 # application-dev.yml
+# Development profile configuration
+# Overrides base config for local development with H2 DB, debug logging, etc.
 # --------------------------------------------------------
 
+# Server settings for development environment
 server:
-  port: 8080
-  shutdown: graceful
+  port: 8080  # Standard dev port
+  shutdown: graceful  # Graceful shutdown for clean dev restarts
 
+# R2DBC database configuration for development (H2 in-memory)
 r2dbc:
-  url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-  username: sa
-  password:
-  initialization-mode: always
-  sql:
+  url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE  # In-memory H2 DB
+  username: sa  # Default H2 username
+  password:  # No password for dev
+  initialization-mode: always  # Always run schema.sql on startup
+  sql:  # Note: This seems misplaced; likely intended under spring.sql.init
 
+# Management settings for development (expose all endpoints for debugging)
     management:
       endpoints:
         web:
           exposure:
-            include: "health,info,metrics,prometheus"
+            include: "health,info,metrics,prometheus"  # Expose all actuator endpoints
       endpoint:
         health:
-          validate-group-membership: true
+          validate-group-membership: true  # Validate health group membership
           group:
             readiness:
-              include: "db,diskSpace"
+              include: "db,diskSpace"  # Readiness includes DB and disk space
             liveness:
-              include: "ping"
-          show-details: always
-          show-components: always
+              include: "ping"  # Liveness is just ping
+          show-details: always  # Show full health details in dev
+          show-components: always  # Show component details
 
+# Spring settings for development
     spring:
       h2:
         console:
-          enabled: true
-          path: /h2-console
+          enabled: true  # Enable H2 web console at /h2-console
+          path: /h2-console  # Console path
       r2dbc:
-        url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+        url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE  # Same H2 config
         username: sa
         password:
 
+# Logging levels for development (debug for troubleshooting)
     logging:
       level:
-        com.resilient: DEBUG
-        org.springframework.boot.actuate.health: DEBUG
+        com.resilient: DEBUG  # Debug level for app code
+        org.springframework.boot.actuate.health: DEBUG  # Debug actuator health
 
+# Demo authentication for development
 auth:
   demo:
-    user: devuser
-    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
+    user: devuser  # Dev-specific demo user
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G  # BCrypt hash for 'password'
 
-security: # <-- All security properties should be nested here
+# Security settings for development (dev-specific JWT config)
+security: # All security properties should be nested here
   jwt:
-    secret: devjwtsecretkey_8f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a
-    issuer: https://auth.dev.resilient.com # It's good practice to have a dev-specific issuer
-    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}
+    secret: devjwtsecretkey_8f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a  # Dev JWT secret (not for prod!)
+    issuer: https://auth.dev.resilient.com # Dev-specific issuer URL
+    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}  # Allowed audiences
     claims:
-      role: USER
-      email: testuser@example.com
+      role: USER  # Default role claim
+      email: testuser@example.com  # Default email claim
 
+# Webhook settings for development
 webhook:
-  secret: devwebhooksecret
-  hmac-secret: devwebhookhmacsecret
+  secret: devwebhooksecret  # Dev webhook secret
+  hmac-secret: devwebhookhmacsecret  # Dev HMAC secret
 
+# Logging configuration for development
 logging:
   level:
-    com.resilient: DEBUG
-    io.github.resilience4j: DEBUG
+    com.resilient: DEBUG  # Debug app logs
+    io.github.resilience4j: DEBUG  # Debug Resilience4j logs
 
+# Reactor settings for development
 reactor:
-  debug: true
+  debug: true  # Enable Reactor debug mode for stack traces
 
+# Spring SQL initialization for development
 spring:
   sql:
     init:

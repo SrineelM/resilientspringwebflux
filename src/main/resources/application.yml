@@ -1,150 +1,143 @@
 # --------------------------------------------------------
 # application.yml
 # Resilient Spring WebFlux POC - Main Configuration
+# This is the base configuration file with defaults shared across profiles.
+# Specific profiles (dev, prod, test) override these as needed.
 # --------------------------------------------------------
 
+# Server configuration: port, shutdown, and server-specific settings
 server:
-  port: 8080
-  shutdown: graceful
+  port: 8080  # Default port for the application
+  shutdown: graceful  # Enables graceful shutdown for clean termination
   tomcat:
-    max-http-form-post-size: 2MB
+    max-http-form-post-size: 2MB  # Max size for HTTP form posts (Tomcat)
   netty:
-    connection-timeout: 60s
+    connection-timeout: 60s  # Connection timeout for Netty server
 
+# Spring framework settings
 spring:
   application:
-    name: resilient-webflux-poc
+    name: resilient-webflux-poc  # Application name for logging and metrics
   profiles:
-    # This is the default profile that will be active unless overridden
-    active: dev
+    active: dev  # Default active profile (can be overridden by env vars)
 
-# --- This section contains configurations shared across all profiles,
-#     but often overridden for production in specific files like application-prod.yml.
-#     For this example, we keep them here as defaults.
+# Management and observability settings (Spring Boot Actuator)
+# These control health checks, metrics, tracing, and monitoring endpoints
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics  # Endpoints exposed via HTTP
   metrics:
     export:
       prometheus:
-        enabled: true
+        enabled: true  # Enable Prometheus metrics export
     enable:
-      reactor: true
+      reactor: true  # Enable Reactor metrics
   endpoint:
     health:
       probes:
-        enabled: true
-      show-details: when_authorized
+        enabled: true  # Enable Kubernetes-style health probes
+      show-details: when_authorized  # Show health details only to authorized users
       group:
         readiness:
-          include: db
+          include: db  # Readiness probe includes DB health
   tracing:
-    # Sample 100% of traces in dev/local (reduce to 0.1 for production)
     sampling:
-      probability: 1.0
-    # Use W3C Trace Context propagation standard (traceparent/tracestate headers)
+      probability: 1.0  # Sample 100% of traces in dev (reduce in prod)
     propagation:
-      type: W3C
-    # Micrometer Baggage Configuration for Cross-Service Context Propagation
+      type: W3C  # Use W3C Trace Context standard for distributed tracing
     baggage:
-      # Remote fields: Keys that are propagated across service boundaries via W3C Baggage headers
-      # These values will be automatically included in outgoing HTTP requests and received from upstream
-      remote-fields: correlationId, userId, tenantId
-      # Correlation fields: Keys that are automatically added to MDC for logging correlation
-      # These will appear in log statements alongside traceId and spanId for easier debugging
+      remote-fields: correlationId, userId, tenantId  # Fields propagated across services
       correlation:
-        fields: correlationId, userId, tenantId
+        fields: correlationId, userId, tenantId  # Fields added to MDC for logging
   zipkin:
-    endpoint: http://zipkin:9411/api/v2/spans
-  # Observability configuration
+    endpoint: http://zipkin:9411/api/v2/spans  # Zipkin server endpoint for trace collection
   observations:
     key-values:
-      service.name: "audit-service"
+      service.name: "audit-service"  # Custom key-value for observations
 
-
+# Resilience4j settings for fault tolerance patterns
 resilience4j:
   circuitbreaker:
     configs:
-      default:
-        sliding-window-size: ${CB_WINDOW_SIZE:10}
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: ${CB_FAILURE_THRESHOLD:50}
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 2s
+      default:  # Default circuit breaker configuration
+        sliding-window-size: ${CB_WINDOW_SIZE:10}  # Number of calls to consider for failure rate
+        minimum-number-of-calls: 5  # Min calls before circuit breaker evaluates
+        permitted-number-of-calls-in-half-open-state: 3  # Calls allowed in half-open state
+        wait-duration-in-open-state: 30s  # Time to wait before transitioning to half-open
+        failure-rate-threshold: ${CB_FAILURE_THRESHOLD:50}  # Failure rate % to open circuit
+        slow-call-rate-threshold: 100  # Slow call rate threshold %
+        slow-call-duration-threshold: 2s  # Duration above which calls are considered slow
     instances:
       userService:
-        base-config: default
+        base-config: default  # Use default config for userService
       notificationService:
         base-config: default
-        failure-rate-threshold: 60
-        wait-duration-in-open-state: 20s
-
+        failure-rate-threshold: 60  # Override failure rate for notificationService
+        wait-duration-in-open-state: 20s  # Shorter wait for notifications
   timelimiter:
     instances:
       default:
-        timeout-duration: 10s
+        timeout-duration: 10s  # Default timeout for service calls
       notificationService:
-        timeout-duration: 5s
-
+        timeout-duration: 5s  # Shorter timeout for notifications
   retry:
     instances:
       userService:
-        max-attempts: 3
-        wait-duration: 1s
-        exponential-backoff-multiplier: 2
+        max-attempts: 3  # Max retry attempts for userService
+        wait-duration: 1s  # Initial wait between retries
+        exponential-backoff-multiplier: 2  # Exponential backoff factor
         retry-exceptions:
           - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
-          - java.util.concurrent.TimeoutException
+          - java.util.concurrent.TimeoutException  # Exceptions to retry on
       auditService:
-        max-attempts: 2
-        wait-duration: 500ms
-
+        max-attempts: 2  # Fewer retries for audit
+        wait-duration: 500ms  # Shorter wait
   bulkhead:
     instances:
       userService:
-        max-concurrent-calls: 25
-        max-wait-duration: 10s
+        max-concurrent-calls: 25  # Max concurrent calls for userService
+        max-wait-duration: 10s  # Max wait time for bulkhead
       notificationService:
-        max-concurrent-calls: 10
-        max-wait-duration: 5s
-
+        max-concurrent-calls: 10  # Lower concurrency for notifications
+        max-wait-duration: 5s  # Shorter wait
   metrics:
-    enable: true
-    auto-config: true
-
+    enable: true  # Enable Resilience4j metrics
+    auto-config: true  # Auto-configure metrics
   prometheus:
-    enable: true
+    enable: true  # Export metrics to Prometheus
 
-# These are secrets that should be handled with environment variables in a production context
+# Security settings (JWT and general security)
+# IMPORTANT: Use environment variables for secrets in production!
 security:
-  enabled: true
+  enabled: true  # Enable security features
   jwt:
-    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b}
-    issuer: https://auth.resilient.com
-    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}
-    ttl-seconds: 3600
-    refresh-ttl-seconds: 86400
+    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b}  # JWT signing secret (256-bit recommended)
+    issuer: https://auth.resilient.com  # JWT issuer URL
+    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}  # Allowed audiences
+    ttl-seconds: 3600  # JWT token time-to-live (1 hour)
+    refresh-ttl-seconds: 86400  # Refresh token TTL (24 hours)
 
+# Webhook settings for secure webhook handling
 webhook:
-  secret: ${WEBHOOK_SECRET:default-webhook-secret}
-  hmac-secret: ${WEBHOOK_HMAC_SECRET:default-hmac-secret}
+  secret: ${WEBHOOK_SECRET:default-webhook-secret}  # Secret for webhook verification
+  hmac-secret: ${WEBHOOK_HMAC_SECRET:default-hmac-secret}  # HMAC secret for webhook signatures
 
+# Audit service configuration
 audit:
   timeout:
-    seconds: 10
+    seconds: 10  # Timeout for audit operations
   batch:
-    max-size: 100
-    concurrency: 10
+    max-size: 100  # Max batch size for audit events
+    concurrency: 10  # Max concurrent audit batches
   retry:
-    max-attempts: 3
+    max-attempts: 3  # Max retry attempts for audit failures
   failure:
-    rate: 0.15  # For simulation, remove in production
+    rate: 0.15  # Simulated failure rate for testing (remove in prod)
 
+# Demo authentication settings (for development/testing only)
 auth:
   demo:
-    user: user
-    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
+    user: user  # Demo username
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G  # BCrypt hash for 'password'

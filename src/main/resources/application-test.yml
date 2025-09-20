@@ -1,57 +1,64 @@
 # Corrected YAML configuration for testing
 # Place this in src/test/resources/application-test.yml
+# Isolated settings for unit/integration tests with H2 DB and test-specific configs.
 
+# Server settings for testing (different port to avoid conflicts)
 server:
-  port: 8081
+  port: 8081  # Test port (different from dev/prod)
 
+# Spring settings for testing
 spring:
   r2dbc:
-    url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    username: sa
-    password: ''
+    url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE  # In-memory H2 for tests
+    username: sa  # Default H2 user
+    password: ''  # No password
   sql:
     init:
-      mode: always
+      mode: always  # Run schema.sql for test DB setup
 
-# All security properties, including 'jwt', should be correctly nested here.
-# This structure is consistent with the other profiles.
+# Security settings for testing (test-specific JWT and multiple keys for rotation testing)
 security:
   jwt:
-    secret: test_jwt_secret
-    issuer: https://test-auth.com
-    audience: ${JWT_AUDIENCE:test-app,test-portal}
-    ttl-seconds: 3600
-    keys:
+    secret: test_jwt_secret  # Test JWT secret
+    issuer: https://test-auth.com  # Test issuer
+    audience: ${JWT_AUDIENCE:test-app,test-portal}  # Test audiences
+    ttl-seconds: 3600  # 1 hour TTL
+    keys:  # Multiple keys for testing JWT rotation
       - test_jwt_secret
       - old_secret_one
       - old_secret_two
 
+# Messaging settings for testing (mock/test Kafka topics)
 messaging:
   kafka:
     consumer:
-      topic: test-consume-topic
-      group: test-group
+      topic: test-consume-topic  # Test topic for consumption
+      group: test-group  # Test consumer group
 
+# Webhook settings for testing
 webhook:
-  secret: test_webhook_secret
-  hmac-secret: test_hmac_secret
+  secret: test_webhook_secret  # Test webhook secret
+  hmac-secret: test_hmac_secret  # Test HMAC secret
 
+# Logging levels for testing (debug for app, info for Spring)
 logging:
   level:
-    root: INFO
-    org.springframework: INFO
-    com.resilient: DEBUG
+    root: INFO  # Root level info
+    org.springframework: INFO  # Spring info
+    com.resilient: DEBUG  # Debug app code for test troubleshooting
 
+# Demo authentication for testing
 auth:
   demo:
-    user: testuser
-    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
+    user: testuser  # Test demo user
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G  # BCrypt hash for 'password'
 
+# Outbox settings for testing (disable real messaging)
 outbox:
   dispatch:
-    enableKafka: false
-    enableActiveMq: false
+    enableKafka: false  # Disable Kafka for tests
+    enableActiveMq: false  # Disable ActiveMQ for tests
     interval:
-      ms: 600000
+      ms: 600000  # Long interval to prevent dispatching during tests
 
 

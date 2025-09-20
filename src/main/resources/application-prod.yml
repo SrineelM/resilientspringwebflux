@@ -1,146 +1,159 @@
 # --------------------------------------------------------
 # application-prod.yml
-# Resilient Spring WebFlux POC - Production profile
+# Production profile configuration
+# Secure, optimized settings for production deployment.
+# Use environment variables for all secrets!
 # --------------------------------------------------------
 
+# Server settings for production
 server:
-  port: 8080
-  shutdown: graceful
+  port: 8080  # Standard prod port
+  shutdown: graceful  # Graceful shutdown for zero-downtime deployments
 
+# Spring settings for production
 spring:
   profiles:
-    active: prod
+    active: prod  # Explicitly set prod profile
   application:
-    name: resilient-webflux-poc
+    name: resilient-webflux-poc  # App name for metrics/logs
   r2dbc:
-    url: r2dbc:postgresql://${PROD_DB_HOST:localhost}:5432/${PROD_DB_NAME:yourdb}
-    username: ${PROD_DB_USERNAME:youruser}
-    password: ${PROD_DB_PASSWORD:yourpassword}
+    url: r2dbc:postgresql://${PROD_DB_HOST:localhost}:5432/${PROD_DB_NAME:yourdb}  # PostgreSQL DB
+    username: ${PROD_DB_USERNAME:youruser}  # DB username from env
+    password: ${PROD_DB_PASSWORD:yourpassword}  # DB password from env
     pool:
-      initial-size: 5
-      max-size: 50
-      max-idle-time: 30m
-      validation-query: SELECT 1
+      initial-size: 5  # Initial connection pool size
+      max-size: 50  # Max connections
+      max-idle-time: 30m  # Max idle time before closing connections
+      validation-query: SELECT 1  # Query to validate connections
 
+# Management settings for production (limited exposure for security)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus  # Expose essential endpoints only
   health:
     db:
-      enabled: true
+      enabled: true  # Enable DB health check
     diskspace:
-      enabled: true
+      enabled: true  # Enable disk space health check
     kafka:
-      enabled: true
+      enabled: true  # Enable Kafka health check (if applicable)
   tracing:
-    enabled: true
+    enabled: true  # Enable distributed tracing
     sampling:
-      probability: 0.1 # Reduced for production
+      probability: 0.1 # Reduced sampling for prod performance (10%)
     propagation:
-      type: W3C
+      type: W3C  # W3C trace propagation
   zipkin:
-    endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
+    endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}  # Zipkin endpoint
   metrics:
     export:
       prometheus:
-        enabled: true
+        enabled: true  # Export metrics to Prometheus
 
+# Additional management settings (nested under management)
     management:
       endpoints:
         web:
           exposure:
-            include: "health,info,metrics,prometheus"
+            include: "health,info,metrics,prometheus"  # Consistent exposure
       endpoint:
         health:
-          validate-group-membership: true
+          validate-group-membership: true  # Validate health groups
           group:
             readiness:
-              include: "db,diskSpace"
+              include: "db,diskSpace"  # Readiness checks
             liveness:
-              include: "ping"
-          show-details: never
-          show-components: never
+              include: "ping"  # Liveness check
+          show-details: never  # Don't show details in prod for security
+          show-components: never  # Hide components
 
+# Spring R2DBC settings for production
     spring:
       r2dbc:
-        url: r2dbc:postgresql://<host>:5432/<database>
-        username: ${DB_USERNAME}
-        password: ${DB_PASSWORD}
+        url: r2dbc:postgresql://<host>:5432/<database>  # Prod DB URL
+        username: ${DB_USERNAME}  # DB user from env
+        password: ${DB_PASSWORD}  # DB pass from env
 
+# Resilience4j settings for production (tuned for stability)
     logging:
       level:
-        com.resilient: INFO
+        com.resilient: INFO  # Info level for prod
         org.springframework.boot.actuate.health: INFO
-        sliding-window-size: 20
-        minimum-number-of-calls: 10
-        permitted-number-of-calls-in-half-open-state: 5
-        wait-duration-in-open-state: 30s
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 100
-        slow-call-duration-threshold: 2s
+        sliding-window-size: 20  # Larger window for circuit breaker
+        minimum-number-of-calls: 10  # More calls before evaluation
+        permitted-number-of-calls-in-half-open-state: 5  # More calls in half-open
+        wait-duration-in-open-state: 30s  # Standard wait
+        failure-rate-threshold: 50  # 50% failure rate threshold
+        slow-call-rate-threshold: 100  # Slow call threshold
+        slow-call-duration-threshold: 2s  # Slow call duration
     instances:
       userService:
-        base-config: default
+        base-config: default  # Use default config
       notificationService:
         base-config: default
-        failure-rate-threshold: 60
-        wait-duration-in-open-state: 20s
+        failure-rate-threshold: 60  # Higher threshold for notifications
+        wait-duration-in-open-state: 20s  # Shorter wait
   timelimiter:
     instances:
       default:
-        timeout-duration: 10s
+        timeout-duration: 10s  # Default timeout
       notificationService:
-        timeout-duration: 5s
+        timeout-duration: 5s  # Shorter for notifications
   retry:
     instances:
       userService:
-        max-attempts: 3
-        wait-duration: 1s
-        exponential-backoff-multiplier: 2
+        max-attempts: 3  # Standard retries
+        wait-duration: 1s  # Initial wait
+        exponential-backoff-multiplier: 2  # Backoff factor
         retry-exceptions:
           - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable
-          - java.util.concurrent.TimeoutException
+          - java.util.concurrent.TimeoutException  # Retry on these exceptions
       auditService:
-        max-attempts: 2
-        wait-duration: 500ms
+        max-attempts: 2  # Fewer for audit
+        wait-duration: 500ms  # Shorter wait
   bulkhead:
     instances:
       userService:
-        max-concurrent-calls: 25
-        max-wait-duration: 10s
+        max-concurrent-calls: 25  # Concurrent calls limit
+        max-wait-duration: 10s  # Wait duration
       notificationService:
-        max-concurrent-calls: 10
-        max-wait-duration: 5s
+        max-concurrent-calls: 10  # Lower for notifications
+        max-wait-duration: 5s  # Shorter wait
   metrics:
-    enable: true
-    auto-config: true
+    enable: true  # Enable metrics
+    auto-config: true  # Auto-config
   prometheus:
-    enable: true
+    enable: true  # Prometheus export
 
+# Security settings for production (use strong secrets!)
 security:
   jwt:
-    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b} # Must be 256-bit or base64 encoded
-    issuer: ${JWT_ISSUER:https://auth.resilient.com}
-    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}
-    ttl-seconds: 3600
-    refresh-ttl-seconds: 86400
+    secret: ${JWT_SECRET:changeme_in_production_9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b} # Secure secret from env
+    issuer: ${JWT_ISSUER:https://auth.resilient.com}  # Prod issuer
+    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}  # Allowed audiences
+    ttl-seconds: 3600  # 1 hour token TTL
+    refresh-ttl-seconds: 86400  # 24 hour refresh TTL
 
+# Webhook settings for production
 webhook:
-  secret: ${WEBHOOK_SECRET:prodwebhooksecret}
-  hmac-secret: ${WEBHOOK_HMAC_SECRET:prodwebhookhmacsecret}
+  secret: ${WEBHOOK_SECRET:prodwebhooksecret}  # Secure webhook secret
+  hmac-secret: ${WEBHOOK_HMAC_SECRET:prodwebhookhmacsecret}  # Secure HMAC secret
 
+# Logging levels for production (minimal for performance)
 logging:
   level:
-    com.resilient: INFO
-    io.github.resilience4j: INFO
-    org.springframework: WARN
+    com.resilient: INFO  # Info level for app
+    io.github.resilience4j: INFO  # Info for Resilience4j
+    org.springframework: WARN  # Warn for Spring
 
+# Reactor settings for production
 reactor:
-  debug: false
+  debug: false  # Disable debug for performance
 
+# Demo authentication for production (consider disabling in real prod)
 auth:
   demo:
-    user: ${DEMO_USER:user}
-    pass-hash: ${DEMO_PASS_HASH:$2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G}
+    user: ${DEMO_USER:user}  # Demo user from env
+    pass-hash: ${DEMO_PASS_HASH:$2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G}  # Demo password hash

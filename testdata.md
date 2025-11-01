@@ -1,17 +1,23 @@
-# Test Data for Resilient Spring WebFlux POC
+---
+# Test Data Reference
 
-This document contains all the test data needed for manual and automated testing of the application.
-
+**Project:** Resilient Spring WebFlux POC  
+**Last Updated:** November 1, 2025
 ---
 
 ## Table of Contents
-1. [User Test Data](#user-test-data)
-2. [JWT Token Examples](#jwt-token-examples)
-3. [Authentication Requests](#authentication-requests)
-4. [Webhook Test Data](#webhook-test-data)
-5. [Kafka Message Examples](#kafka-message-examples)
-6. [Database Seed Data](#database-seed-data)
-
+1. [User Test Data](#1-user-test-data)
+2. [JWT Token Examples](#2-jwt-token-examples)
+3. [Authentication Requests](#3-authentication-requests)
+4. [Webhook Test Data](#4-webhook-test-data)
+5. [Kafka Message Examples](#5-kafka-message-examples)
+6. [Database Seed Data](#6-database-seed-data)
+7. [Correlation and Tracing Headers](#7-correlation-and-tracing-headers)
+8. [Complete User Management Flow](#8-complete-user-management-flow)
+9. [Environment Variables for Testing](#9-environment-variables-for-testing)
+10. [Testing Scenarios](#10-testing-scenarios)
+11. [Common Test Passwords](#11-common-test-passwords)
+12. [Postman Collection Variables](#12-postman-collection-variables)
 ---
 
 ## 1. User Test Data
@@ -78,6 +84,7 @@ This document contains all the test data needed for manual and automated testing
 
 ---
 
+---
 ## 2. JWT Token Examples
 
 ### How to Generate JWT Tokens
@@ -133,6 +140,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiI...
 
 ---
 
+---
 ## 3. Authentication Requests
 
 ### Login Request
@@ -187,6 +195,7 @@ curl -X POST http://localhost:8080/api/auth/logout \
 
 ---
 
+---
 ## 4. Webhook Test Data
 
 ### Valid Webhook Request with HMAC Signature
@@ -271,6 +280,7 @@ print(f"X-Webhook-Signature: {signature}")
 
 ---
 
+---
 ## 5. Kafka Message Examples
 
 ### Send Kafka Message
@@ -307,6 +317,7 @@ curl -X POST http://localhost:8080/api/kafka/send \
 
 ---
 
+---
 ## 6. Database Seed Data
 
 ### Insert Test Users (SQL)
@@ -330,6 +341,7 @@ VALUES
 
 ---
 
+---
 ## 7. Correlation and Tracing Headers
 
 ### Request with Correlation Headers
@@ -348,6 +360,7 @@ traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 
 ---
 
+---
 ## 8. Complete User Management Flow
 
 ### Step 1: Create a User
@@ -393,6 +406,7 @@ curl -X DELETE http://localhost:8080/api/users/1 \
 
 ---
 
+---
 ## 9. Environment Variables for Testing
 
 ### Required Environment Variables
@@ -422,6 +436,7 @@ export REDIS_PORT="6379"
 
 ---
 
+---
 ## 10. Testing Scenarios
 
 ### Scenario 1: Successful User Registration and Login
@@ -451,6 +466,7 @@ export REDIS_PORT="6379"
 
 ---
 
+---
 ## 11. Common Test Passwords
 
 All test users use the same password for simplicity:
@@ -461,6 +477,7 @@ All test users use the same password for simplicity:
 
 ---
 
+---
 ## 12. Postman Collection Variables
 
 If using Postman, set these collection variables:

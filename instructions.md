@@ -1,14 +1,13 @@
-# Developer and Architect Instructions
-## Resilient Spring WebFlux POC - Reference Implementation Guide
+---
+# Developer & Architect Guide
 
-**Version**: 1.0.0
-**Target Audience**: Senior Architects, Software Engineers, Tech Leads
-**Last Updated**: November 1, 2025
-
+**Project:** Resilient Spring WebFlux POC  
+**Version:** 1.0.0  
+**Audience:** Senior Architects, Software Engineers, Tech Leads  
+**Last Updated:** November 1, 2025
 ---
 
 ## Table of Contents
-
 1. [Project Overview](#1-project-overview)
 2. [Architecture and Design Patterns](#2-architecture-and-design-patterns)
 3. [Prerequisites and Setup](#3-prerequisites-and-setup)
@@ -19,7 +18,8 @@
 8. [Best Practices Demonstrated](#8-best-practices-demonstrated)
 9. [Troubleshooting](#9-troubleshooting)
 10. [References and Further Learning](#10-references-and-further-learning)
-
+11. [Contributing](#11-contributing)
+12. [Support and Community](#12-support-and-community)
 ---
 
 ## 1. Project Overview
@@ -76,6 +76,7 @@ src/
 
 ---
 
+---
 ## 2. Architecture and Design Patterns
 
 ### 2.1 Hexagonal Architecture (Ports and Adapters)
@@ -136,6 +137,7 @@ Request → RateLimitingWebFilter
 
 ---
 
+---
 ## 3. Prerequisites and Setup
 
 ### 3.1 Required Software
@@ -184,6 +186,7 @@ cd resilientspringwebflux
 
 ---
 
+---
 ## 4. Running the Application
 
 ### 4.1 Quick Start (Development Mode)
@@ -243,6 +246,7 @@ curl http://localhost:8080/actuator/prometheus
 
 ---
 
+---
 ## 5. Testing Guide
 
 ### 5.1 Running Tests
@@ -314,6 +318,7 @@ class UserManagementIntegrationTest {
 
 ---
 
+---
 ## 6. Key Features and How to Use Them
 
 ### 6.1 JWT Authentication
@@ -460,6 +465,7 @@ public class MyService {
 
 ---
 
+---
 ## 7. Adding New Features
 
 ### 7.1 Adding a New Secured Endpoint
@@ -593,6 +599,7 @@ public class ExternalServiceHealthIndicator implements ReactiveHealthIndicator {
 
 ---
 
+---
 ## 8. Best Practices Demonstrated
 
 ### 8.1 Reactive Programming
@@ -692,6 +699,7 @@ when(userRepository.findById(1L))
 
 ---
 
+---
 ## 9. Troubleshooting
 
 ### 9.1 Common Issues
@@ -767,6 +775,7 @@ Hooks.onOperatorDebug();
 
 ---
 
+---
 ## 10. References and Further Learning
 
 ### 10.1 Official Documentation
@@ -799,6 +808,7 @@ Hooks.onOperatorDebug();
 
 ---
 
+---
 ## 11. Contributing
 
 ### 11.1 Code Style
@@ -833,6 +843,7 @@ refactor: improve error handling in controller
 
 ---
 
+---
 ## 12. Support and Community
 
 ### 12.1 Getting Help

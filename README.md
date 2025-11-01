@@ -293,11 +293,52 @@ Access the H2 database console at: **http://localhost:8080/h2-console**
 
 This project demonstrates **production-grade Spring WebFlux** patterns:
 
+
 ### Design Patterns
 - ✅ **Hexagonal Architecture** (Ports & Adapters)
 - ✅ **Transactional Outbox Pattern** (reliable messaging)
 - ✅ **Circuit Breaker, Retry, Bulkhead** (Resilience4j)
 - ✅ **Reactive Programming** (Project Reactor)
+
+### ASCII Architecture Diagram
+```
+      +-----------------------------+
+      |        External Clients      |
+      +-----------------------------+
+           |
+           v
+      +-----------------------------+
+      |      WebFlux Controllers     |
+      +-----------------------------+
+           |
+           v
+   +------------------- Security & Filters -------------------+
+   |  JWT Auth  |  Rate Limiting  |  Baggage/Tracing Filters  |
+   +---------------------------------------------------------+
+           |
+           v
+      +-----------------------------+
+      |      Service Layer           |
+      |  (Business Logic, Ports)     |
+      +-----------------------------+
+           |
+           v
+   +------------------- Adapters -------------------+
+   |  Repository (R2DBC)  |  Messaging (Kafka/AMQ)  |
+   |  Outbox Dispatcher   |  Notification/Audit     |
+   +------------------------------------------------+
+           |
+           v
+      +-----------------------------+
+      |      External Systems        |
+      |  DB / Kafka / ActiveMQ /     |
+      |  Redis / Zipkin / Prometheus |
+      +-----------------------------+
+
+  [Observability: Tracing, Metrics, Logging flows through all layers]
+  [Resilience: Circuit Breakers, Retries, Bulkheads in Service/Adapter]
+  [Messaging Reliability: Transactional Outbox, DLQ, Correlation]
+```
 
 ### Technology Stack
 | Component | Technology | Purpose |

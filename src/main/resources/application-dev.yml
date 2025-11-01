@@ -1,92 +1,129 @@
 # --------------------------------------------------------
 # application-dev.yml
 # Development profile configuration
-# Overrides base config for local development with H2 DB, debug logging, etc.
+# Minimal setup for local development on 8GB RAM machines
+# Uses H2 in-memory database and stub services (no external dependencies)
 # --------------------------------------------------------
 
-# Server settings for development environment
+# Server settings for development
 server:
-  port: 8080  # Standard dev port
-  shutdown: graceful  # Graceful shutdown for clean dev restarts
-
-# R2DBC database configuration for development (H2 in-memory)
-r2dbc:
-  url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE  # In-memory H2 DB
-  username: sa  # Default H2 username
-  password:  # No password for dev
-  initialization-mode: always  # Always run schema.sql on startup
-  sql:  # Note: This seems misplaced; likely intended under spring.sql.init
-
-# Management settings for development (expose all endpoints for debugging)
-    management:
-      endpoints:
-        web:
-          exposure:
-            include: "health,info,metrics,prometheus"  # Expose all actuator endpoints
-      endpoint:
-        health:
-          validate-group-membership: true  # Validate health group membership
-          group:
-            readiness:
-              include: "db,diskSpace"  # Readiness includes DB and disk space
-            liveness:
-              include: "ping"  # Liveness is just ping
-          show-details: always  # Show full health details in dev
-          show-components: always  # Show component details
+  port: 8080
+  shutdown: graceful
 
 # Spring settings for development
-    spring:
-      h2:
-        console:
-          enabled: true  # Enable H2 web console at /h2-console
-          path: /h2-console  # Console path
-      r2dbc:
-        url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE  # Same H2 config
-        username: sa
-        password:
+spring:
+  application:
+    name: resilient-webflux-poc
 
-# Logging levels for development (debug for troubleshooting)
-    logging:
-      level:
-        com.resilient: DEBUG  # Debug level for app code
-        org.springframework.boot.actuate.health: DEBUG  # Debug actuator health
+  # H2 in-memory database for development
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # R2DBC configuration for H2
+  r2dbc:
+    url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ''
+    pool:
+      initial-size: 2
+      max-size: 10  # Reduced for 8GB RAM
+
+  # SQL initialization
+  sql:
+    init:
+      mode: always
+
+# Management endpoints (minimal for dev)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      group:
+        readiness:
+          include: db,diskSpace
+        liveness:
+          include: ping
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  tracing:
+    enabled: false  # Disable tracing in dev to save resources
+  zipkin:
+    enabled: false  # Disable Zipkin in dev
+
+# Resilience4j (simplified for dev)
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 5  # Reduced for dev
+        minimum-number-of-calls: 3
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+  retry:
+    instances:
+      userService:
+        max-attempts: 2
+        wait-duration: 500ms
+  bulkhead:
+    instances:
+      userService:
+        max-concurrent-calls: 10  # Reduced for 8GB RAM
+        max-wait-duration: 5s
+
+# Security settings for development
+security:
+  jwt:
+    secret: ${JWT_SECRET:devjwtsecretkey_8f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a}
+    issuer: https://auth.dev.resilient.com
+    audience: resilient-app,admin-portal
+    ttl-seconds: 3600
+
+# Webhook settings for development
+webhook:
+  secret: devwebhooksecret
+  hmac-secret: devwebhookhmacsecret
 
 # Demo authentication for development
 auth:
   demo:
-    user: devuser  # Dev-specific demo user
-    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G  # BCrypt hash for 'password'
-
-# Security settings for development (dev-specific JWT config)
-security: # All security properties should be nested here
-  jwt:
-    secret: devjwtsecretkey_8f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a  # Dev JWT secret (not for prod!)
-    issuer: https://auth.dev.resilient.com # Dev-specific issuer URL
-    audience: ${JWT_AUDIENCE:resilient-app,admin-portal}  # Allowed audiences
-    claims:
-      role: USER  # Default role claim
-      email: testuser@example.com  # Default email claim
-
-# Webhook settings for development
-webhook:
-  secret: devwebhooksecret  # Dev webhook secret
-  hmac-secret: devwebhookhmacsecret  # Dev HMAC secret
+    user: devuser
+    pass-hash: $2a$10$Dow1jZz8LRx.9Z/9Bf4fEuCcoYI9Y1VtWc2Sbl3hM3Pph7XnJbI1G
 
 # Logging configuration for development
 logging:
   level:
-    com.resilient: DEBUG  # Debug app logs
-    io.github.resilience4j: DEBUG  # Debug Resilience4j logs
+    root: INFO
+    com.resilient: DEBUG
+    io.github.resilience4j: DEBUG
+    org.springframework.security: DEBUG
+    reactor.netty: INFO
 
 # Reactor settings for development
 reactor:
-  debug: true  # Enable Reactor debug mode for stack traces
+  debug: true
 
-# Spring SQL initialization for development
-spring:
-  sql:
-    init:
-      mode: always # Ensure schema.sql is executed during startup
+# Outbox dispatcher - disabled in dev (use stubs)
+outbox:
+  dispatch:
+    enabled: false  # Disable outbox dispatcher in dev
+    enableKafka: false
+    enableActiveMq: false
+
+# Messaging - use stubs in dev (no external brokers needed)
+messaging:
+  kafka:
+    enabled: false
+  activemq:
+    enabled: false
 
 
 

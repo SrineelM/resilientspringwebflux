@@ -160,5 +160,383 @@ Planned / Optional Enhancements
 - Adopt OpenTelemetry automatic instrumentation for JMS & Kafka.
 - Persist structured header map (currently JSON) with schema evolution strategy.
 
-Quick Start
+## Quick Start Guide
+
+### Prerequisites
+- **JDK 17+** installed
+- **Gradle 8.9+** (wrapper included)
+- **8GB RAM minimum** for local development
+- **Docker** (optional, for full stack)
+- **Postman** (optional, for API testing)
+
+### Clone and Build
+```bash
+git clone https://github.com/your-org/resilientspringwebflux.git
+cd resilientspringwebflux
+
+# Build the project
+./gradlew clean build
+
+# Run tests
+./gradlew test
+```
+
+### Running Locally (Development Mode)
+
+**Simplest way** - no external dependencies needed:
+
+```bash
+# Start application with dev profile (H2 in-memory, messaging stubs)
+./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+
+Application starts at: **http://localhost:8080**
+
+**Verify it's running**:
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+### Testing the Application
+
+#### 1. Get a JWT Token
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"password"}'
+```
+
+Save the `token` from the response.
+
+#### 2. Create a User
+```bash
+curl -X POST http://localhost:8080/api/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "email": "john.doe@example.com",
+    "fullName": "John Doe"
+  }'
+```
+
+#### 3. Get All Users
+```bash
+curl -X GET http://localhost:8080/api/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 4. Access Metrics
+```bash
+# Prometheus metrics
+curl http://localhost:8080/actuator/prometheus
+
+# Health check with details
+curl http://localhost:8080/actuator/health
+```
+
+### Using Postman
+
+1. **Import Collection**: See `postman.md` for complete API documentation
+2. **Set Variables**:
+   - `base_url`: http://localhost:8080
+   - `jwt_token`: (obtained from login)
+3. **Run Tests**: Follow scenarios in `postman.md`
+
+Detailed Postman setup and test data available in:
+- **postman.md** - API endpoints and sample requests
+- **testdata.md** - Complete test data reference
+
+### Testing with Docker Compose (Full Stack)
+
+```bash
+# Start PostgreSQL, Kafka, Zipkin, Redis
+docker-compose up -d
+
+# Set environment variables
+export SPRING_PROFILES_ACTIVE=prod
+export JWT_SECRET="your-secret-key-min-256-bits-aabbccddeeff00112233445566778899"
+export PROD_DB_HOST=localhost
+export PROD_DB_NAME=resilient_db
+export PROD_DB_USERNAME=postgres
+export PROD_DB_PASSWORD=postgres
+
+# Run application
+./gradlew bootRun
+```
+
+### H2 Console (Dev Profile Only)
+
+Access the H2 database console at: **http://localhost:8080/h2-console**
+
+- **JDBC URL**: `jdbc:h2:mem:testdb`
+- **Username**: `sa`
+- **Password**: (leave empty)
+
+## Documentation
+
+### For Developers
+- **instructions.md** - Comprehensive developer guide with architecture, patterns, and how-to guides
+- **review.md** - Architectural review and best practices analysis
+- **testdata.md** - Complete test data for all scenarios
+- **postman.md** - Postman collection and API testing guide
+
+### Key Configuration Files
+- **application.yml** - Base configuration (shared)
+- **application-dev.yml** - Development (local, 8GB RAM optimized)
+- **application-prod.yml** - Production (PostgreSQL, Kafka, Redis)
+- **application-test.yml** - Test configuration
+
+---
+
+## Architecture Overview
+
+This project demonstrates **production-grade Spring WebFlux** patterns:
+
+### Design Patterns
+- ✅ **Hexagonal Architecture** (Ports & Adapters)
+- ✅ **Transactional Outbox Pattern** (reliable messaging)
+- ✅ **Circuit Breaker, Retry, Bulkhead** (Resilience4j)
+- ✅ **Reactive Programming** (Project Reactor)
+
+### Technology Stack
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Framework | Spring Boot 3.3.5 | Main framework |
+| Reactive | Spring WebFlux 6.x | Reactive web |
+| Security | Spring Security + JWT | Authentication |
+| Database | R2DBC (H2/PostgreSQL) | Reactive DB |
+| Messaging | Kafka + ActiveMQ | Event streaming |
+| Observability | Micrometer + OpenTelemetry | Tracing & metrics |
+| Fault Tolerance | Resilience4j 2.1.0 | Circuit breakers |
+
+### Project Structure
+```
+src/main/java/com/resilient/
+├── adapters/        # Hexagonal architecture adapters
+├── config/          # Spring configuration (Security, DB, Messaging)
+├── controller/      # REST API controllers
+├── dto/             # Data Transfer Objects
+├── exception/       # Global exception handling
+├── filter/          # WebFlux filters (tracing, baggage, correlation)
+├── messaging/       # Kafka, ActiveMQ, Outbox pattern
+├── model/           # Domain models
+├── observability/   # Custom metrics and tracing
+├── ports/           # Port interfaces (hexagonal architecture)
+├── repository/      # R2DBC repositories
+├── security/        # JWT, authentication, rate limiting
+└── service/         # Business logic services
+```
+
+---
+
+## Key Features Demonstrated
+
+### 1. Security
+- ✅ JWT authentication with key rotation
+- ✅ Token blacklisting for logout
+- ✅ Rate limiting (Redis + in-memory)
+- ✅ HMAC webhook signature validation
+- ✅ Extended JWT claims validation
+
+### 2. Observability
+- ✅ Distributed tracing (OpenTelemetry + Zipkin)
+- ✅ W3C Trace Context propagation
+- ✅ Custom baggage fields (correlationId, userId, tenantId)
+- ✅ Prometheus metrics export
+- ✅ Structured JSON logging with MDC
+
+### 3. Fault Tolerance
+- ✅ Circuit breakers per service
+- ✅ Retry with exponential backoff
+- ✅ Bulkhead for concurrency control
+- ✅ Fallback methods for degraded operations
+- ✅ Graceful shutdown
+
+### 4. Messaging Reliability
+- ✅ Transactional Outbox pattern
+- ✅ Dead Letter Queue (DLQ) handling
+- ✅ Correlation ID propagation
+- ✅ At-least-once delivery guarantee
+- ✅ Kafka & ActiveMQ integration
+
+### 5. Reactive Programming
+- ✅ Non-blocking I/O throughout
+- ✅ Backpressure handling
+- ✅ Proper Mono/Flux usage
+- ✅ Custom schedulers for blocking operations
+- ✅ Context propagation
+
+---
+
+## Testing
+
+### Run All Tests
+```bash
+./gradlew test
+```
+
+### Run Tests with Coverage
+```bash
+./gradlew test jacocoTestReport
+# Report: build/reports/jacoco/test/html/index.html
+```
+
+### Test Profiles
+- **dev**: H2 in-memory, messaging stubs, minimal config
+- **test**: H2 in-memory, disabled schedulers, fast tests
+- **prod**: PostgreSQL, Kafka, ActiveMQ, full features
+
+### Testing Tools Used
+- **JUnit 5** - Test framework
+- **StepVerifier** - Reactive testing
+- **MockBean** - Mocking dependencies
+- **WebTestClient** - Integration testing
+- **Testcontainers** - Database containers (optional)
+
+---
+
+## Configuration Profiles
+
+### Development (dev)
+- H2 in-memory database
+- Messaging stubs (no Kafka/ActiveMQ needed)
+- In-memory rate limiter
+- Debug logging enabled
+- Tracing disabled (performance)
+- **Optimized for 8GB RAM**
+
+### Production (prod)
+- PostgreSQL database with connection pooling
+- Real Kafka + ActiveMQ producers/consumers
+- Redis-based rate limiter
+- Full distributed tracing (Zipkin)
+- Info-level logging
+- Circuit breakers tuned for production
+
+### Test (test)
+- H2 in-memory database
+- Disabled outbox dispatcher
+- Configurable test topics
+- Fast startup, minimal resources
+
+---
+
+## Monitoring & Health Checks
+
+### Actuator Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/actuator/health` | Health status |
+| `/actuator/health/readiness` | Readiness probe (K8s) |
+| `/actuator/health/liveness` | Liveness probe (K8s) |
+| `/actuator/prometheus` | Prometheus metrics |
+| `/actuator/metrics` | Available metrics |
+| `/actuator/info` | Application info |
+
+### Custom Health Indicators
+- Database connectivity (R2DBC)
+- Disk space
+- Custom business health checks
+
+### Metrics Available
+- HTTP request duration
+- Circuit breaker state
+- Retry attempts
+- Rate limiting counters
+- Custom business metrics
+
+---
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Find process on port 8080
+lsof -i :8080
+
+# Kill it
+kill -9 <PID>
+```
+
+### JWT Token Issues
+1. Check token expiration
+2. Verify issuer matches config
+3. Ensure audience is correct
+4. Enable debug logging:
+```bash
+export LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=DEBUG
+```
+
+### Database Connection Issues
+- Verify H2 console at `/h2-console` (dev profile)
+- Check `application-dev.yml` for R2DBC URL
+- Ensure schema.sql is executed
+
+### Outbox Not Publishing
+1. Check `outbox.dispatch.enabled=true`
+2. Verify events in `message_outbox` table
+3. Check Kafka/ActiveMQ connectivity (prod)
+4. Enable debug logging for `com.resilient.messaging`
+
+---
+
+## Contributing
+
+### Code Style
+- Code formatting: `./gradlew spotlessApply`
+- Auto-formatted before compilation
+- Follows Palantir Java Format
+
+### Git Workflow
+1. Create feature branch
+2. Make changes
+3. Run tests: `./gradlew test`
+4. Format code: `./gradlew spotlessApply`
+5. Commit with conventional message
+6. Create pull request
+
+### Commit Message Format
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+```
+feat: add new feature
+fix: resolve bug
+docs: update documentation
+test: add tests
+refactor: improve code structure
+```
+
+---
+
+## Learning Resources
+
+### Documentation Files
+- **instructions.md** - Complete developer guide
+- **review.md** - Architectural analysis and best practices
+- **testdata.md** - Test data and examples
+- **postman.md** - API testing guide
+
+### External Resources
+- [Spring WebFlux Docs](https://docs.spring.io/spring-framework/reference/web/webflux.html)
+- [Project Reactor](https://projectreactor.io/docs/core/release/reference/)
+- [Resilience4j Guide](https://resilience4j.readme.io/)
+- [Spring Security WebFlux](https://docs.spring.io/spring-security/reference/reactive/index.html)
+
+---
+
+## License
+
+This project is provided as a reference implementation for educational purposes.
+
+---
+
+## Support
+
+- **Issues**: Create GitHub issue
+- **Questions**: See `instructions.md` for detailed guides
+- **Testing**: See `testdata.md` and `postman.md`
+
+---
+
 Clone the repository

@@ -62,10 +62,9 @@ public class RedisReactiveRateLimiter implements ReactiveRateLimiter {
     static {
         SLIDING_WINDOW_SCRIPT = new DefaultRedisScript<>();
         SLIDING_WINDOW_SCRIPT.setResultType(Long.class); // Script returns 1 (allowed) or 0 (denied)
-        SLIDING_WINDOW_SCRIPT.setScriptSource(
-                new StaticScriptSource(
-                        // Remove expired entries (older than current time - window size)
-                        "redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1]-ARGV[2]);"
+        SLIDING_WINDOW_SCRIPT.setScriptSource(new StaticScriptSource(
+                // Remove expired entries (older than current time - window size)
+                "redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1]-ARGV[2]);"
                         // Count remaining entries in the window
                         + "local count = redis.call('ZCARD', KEYS[1]);"
                         // If under limit, add current timestamp and allow

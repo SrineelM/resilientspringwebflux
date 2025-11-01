@@ -23,7 +23,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
-
 /**
  * Service for auditing user actions and events in a reactive, observable, and metrics-driven way.
  * <p>
@@ -86,7 +85,6 @@ public class AuditService implements UserAuditPort {
         this.auditLatencyTimer = registry.timer("audit.latency.timer");
     }
 
-
     /**
      * Audits a single user action.
      * <p>
@@ -106,36 +104,35 @@ public class AuditService implements UserAuditPort {
      */
     @Override
     public Mono<AuditResult> auditUserAction(
-        String correlationId, String action, User user, Map<String, Object> context) {
-    return Mono.deferContextual(contextView -> {
-            // Propagate correlationId to MDC for log correlation
-            try (var mdcCloseable = MDC.putCloseable("correlationId", correlationId)) {
-            log.info(
-                "Processing audit request: correlationId={}, action={}, userId={}",
-                correlationId,
-                action,
-                user.id());
+            String correlationId, String action, User user, Map<String, Object> context) {
+        return Mono.deferContextual(contextView -> {
+                    // Propagate correlationId to MDC for log correlation
+                    try (var mdcCloseable = MDC.putCloseable("correlationId", correlationId)) {
+                        log.info(
+                                "Processing audit request: correlationId={}, action={}, userId={}",
+                                correlationId,
+                                action,
+                                user.id());
 
-            // Validate required inputs
-            validateAuditInputs(correlationId, action, user);
+                        // Validate required inputs
+                        validateAuditInputs(correlationId, action, user);
 
-            // Perform the core audit operation with timeout and error handling
-            return performAuditOperation(correlationId, action, user, context)
-                .timeout(Duration.ofSeconds(auditTimeoutSeconds))
-                .onErrorResume(throwable -> {
-                    log.error(
-                        "Audit processing failed for correlationId={}: {}",
-                        correlationId,
-                        throwable.getMessage());
-                    return Mono.just(AuditResult.failure(
-                        correlationId, "Audit service error: " + throwable.getMessage()));
-                });
-            }
-        })
-        // Use boundedElastic for compatibility with blocking MDC/logging
-        .subscribeOn(Schedulers.boundedElastic());
+                        // Perform the core audit operation with timeout and error handling
+                        return performAuditOperation(correlationId, action, user, context)
+                                .timeout(Duration.ofSeconds(auditTimeoutSeconds))
+                                .onErrorResume(throwable -> {
+                                    log.error(
+                                            "Audit processing failed for correlationId={}: {}",
+                                            correlationId,
+                                            throwable.getMessage());
+                                    return Mono.just(AuditResult.failure(
+                                            correlationId, "Audit service error: " + throwable.getMessage()));
+                                });
+                    }
+                })
+                // Use boundedElastic for compatibility with blocking MDC/logging
+                .subscribeOn(Schedulers.boundedElastic());
     }
-
 
     /**
      * Audits a batch of user actions/events with concurrency and error handling.
@@ -153,51 +150,50 @@ public class AuditService implements UserAuditPort {
      */
     @Override
     public Mono<List<AuditResult>> auditBatchActions(List<AuditEvent> events) {
-    if (events == null || events.isEmpty()) {
-        log.info("Empty batch audit request received");
-        return Mono.just(List.of());
+        if (events == null || events.isEmpty()) {
+            log.info("Empty batch audit request received");
+            return Mono.just(List.of());
+        }
+
+        // Truncate batch if it exceeds maxBatchSize
+        if (events.size() > maxBatchSize) {
+            log.warn(
+                    "Batch size {} exceeds maximum {}. Processing first {} events",
+                    events.size(),
+                    maxBatchSize,
+                    maxBatchSize);
+            events = events.subList(0, maxBatchSize);
+        }
+
+        log.info("Processing batch audit with {} events", events.size());
+
+        return Flux.fromIterable(events)
+                .flatMap(
+                        event -> auditUserAction(event.correlationId(), event.action(), event.user(), event.context())
+                                .onErrorResume(error -> {
+                                    log.error(
+                                            "Failed to audit event: correlationId={}, error={}",
+                                            event.correlationId(),
+                                            error.getMessage());
+                                    return Mono.just(AuditResult.failure(
+                                            event.correlationId(), "Batch audit failed: " + error.getMessage()));
+                                }),
+                        batchConcurrency)
+                .collectList()
+                .doOnSuccess(results -> {
+                    long successCount = results.stream()
+                            .mapToLong(r -> r.isSuccess() ? 1 : 0)
+                            .sum();
+                    long failureCount = results.size() - successCount;
+                    log.info(
+                            "Batch audit completed: total={}, success={}, failures={}",
+                            results.size(),
+                            successCount,
+                            failureCount);
+                })
+                // Allow more time for batch operations
+                .timeout(Duration.ofSeconds(auditTimeoutSeconds * 2));
     }
-
-    // Truncate batch if it exceeds maxBatchSize
-    if (events.size() > maxBatchSize) {
-        log.warn(
-            "Batch size {} exceeds maximum {}. Processing first {} events",
-            events.size(),
-            maxBatchSize,
-            maxBatchSize);
-        events = events.subList(0, maxBatchSize);
-    }
-
-    log.info("Processing batch audit with {} events", events.size());
-
-    return Flux.fromIterable(events)
-        .flatMap(
-            event -> auditUserAction(event.correlationId(), event.action(), event.user(), event.context())
-                .onErrorResume(error -> {
-                    log.error(
-                        "Failed to audit event: correlationId={}, error={}",
-                        event.correlationId(),
-                        error.getMessage());
-                    return Mono.just(AuditResult.failure(
-                        event.correlationId(), "Batch audit failed: " + error.getMessage()));
-                }),
-            batchConcurrency)
-        .collectList()
-        .doOnSuccess(results -> {
-            long successCount = results.stream()
-                .mapToLong(r -> r.isSuccess() ? 1 : 0)
-                .sum();
-            long failureCount = results.size() - successCount;
-            log.info(
-                "Batch audit completed: total={}, success={}, failures={}",
-                results.size(),
-                successCount,
-                failureCount);
-        })
-        // Allow more time for batch operations
-        .timeout(Duration.ofSeconds(auditTimeoutSeconds * 2));
-    }
-
 
     /**
      * Core audit operation with retry logic, metrics, and simulated failures/delays.
@@ -274,7 +270,6 @@ public class AuditService implements UserAuditPort {
                 });
     }
 
-
     /**
      * Process and persist audit data.
      * <p>
@@ -303,7 +298,6 @@ public class AuditService implements UserAuditPort {
         // Implement your actual audit persistence/integration logic here
     }
 
-
     /**
      * Validates required audit input parameters.
      * Throws IllegalArgumentException if any required field is missing.
@@ -326,7 +320,6 @@ public class AuditService implements UserAuditPort {
             throw new IllegalArgumentException("User ID cannot be null");
         }
     }
-
 
     /**
      * Custom exception for audit-specific errors (used for retry logic).

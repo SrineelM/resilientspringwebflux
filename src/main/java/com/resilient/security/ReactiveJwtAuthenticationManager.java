@@ -1,7 +1,5 @@
-
 // Package for security components
 package com.resilient.security;
-
 
 import io.jsonwebtoken.Claims;
 import java.time.Duration;
@@ -47,10 +45,8 @@ import reactor.core.scheduler.Schedulers;
 // Main authentication manager for JWT in a reactive (WebFlux) context
 public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationManager, ServerAuthenticationConverter {
 
-
     // Logger for authentication events and errors
     private static final Logger log = LoggerFactory.getLogger(ReactiveJwtAuthenticationManager.class);
-
 
     // Utility for JWT parsing and validation
     private final JwtUtil jwtUtil;
@@ -68,7 +64,6 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
     // Minimum token version for extended claim validation
     private final int minTokenVersion;
 
-
     /**
      * Constructor for dependency injection and configuration.
      *
@@ -82,35 +77,41 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
      */
     @Autowired
     public ReactiveJwtAuthenticationManager(
-        JwtUtil jwtUtil,
-        @Qualifier("authScheduler") Scheduler authScheduler,
-        @Autowired(required = false) TokenBlacklistService blacklistService,
-        @Value("${security.jwt.issuer}") String expectedIssuer,
-        @Value("${security.jwt.audience}") List<String> allowedAudiences,
-        @Value("${security.jwt.allowed-client-ids:}") List<String> allowedClientIds,
-        @Value("${security.jwt.min-version:0}") int minTokenVersion) {
+            JwtUtil jwtUtil,
+            @Qualifier("authScheduler") Scheduler authScheduler,
+            @Autowired(required = false) TokenBlacklistService blacklistService,
+            @Value("${security.jwt.issuer}") String expectedIssuer,
+            @Value("${security.jwt.audience}") List<String> allowedAudiences,
+            @Value("${security.jwt.allowed-client-ids:}") List<String> allowedClientIds,
+            @Value("${security.jwt.min-version:0}") int minTokenVersion) {
 
-    // Validate and set required dependencies
-    this.jwtUtil = Objects.requireNonNull(jwtUtil, "jwtUtil must not be null");
-    // Use provided scheduler or default to bounded elastic for blocking operations
-    this.authScheduler = authScheduler != null ? authScheduler : Schedulers.boundedElastic();
-    // Optional blacklist service for token revocation
-    this.blacklistService = blacklistService;
+        // Validate and set required dependencies
+        this.jwtUtil = Objects.requireNonNull(jwtUtil, "jwtUtil must not be null");
+        // Use provided scheduler or default to bounded elastic for blocking operations
+        this.authScheduler = authScheduler != null ? authScheduler : Schedulers.boundedElastic();
+        // Optional blacklist service for token revocation
+        this.blacklistService = blacklistService;
 
-    // Validate and trim issuer configuration
-    this.expectedIssuer = Objects.requireNonNull(expectedIssuer, "issuer must not be null").trim();
-    // Process allowed audiences: trim, filter empty, and collect to immutable list
-    this.allowedAudiences = allowedAudiences != null
-        ? allowedAudiences.stream().map(String::trim).filter(s -> !s.isEmpty()).toList()
-        : Collections.emptyList();
-    // Process allowed client IDs similarly
-    this.allowedClientIds = allowedClientIds != null
-        ? allowedClientIds.stream().map(String::trim).filter(s -> !s.isEmpty()).toList()
-        : Collections.emptyList();
-    // Minimum token version for extended claims validation
-    this.minTokenVersion = minTokenVersion;
+        // Validate and trim issuer configuration
+        this.expectedIssuer = Objects.requireNonNull(expectedIssuer, "issuer must not be null")
+                .trim();
+        // Process allowed audiences: trim, filter empty, and collect to immutable list
+        this.allowedAudiences = allowedAudiences != null
+                ? allowedAudiences.stream()
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList()
+                : Collections.emptyList();
+        // Process allowed client IDs similarly
+        this.allowedClientIds = allowedClientIds != null
+                ? allowedClientIds.stream()
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList()
+                : Collections.emptyList();
+        // Minimum token version for extended claims validation
+        this.minTokenVersion = minTokenVersion;
     }
-
 
     /**
      * Converts a ServerWebExchange to a Spring Security Authentication object by extracting and validating a JWT.
@@ -156,7 +157,6 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
                 });
     }
 
-
     /**
      * Checks blacklist (if enabled) before validating and creating Authentication.
      *
@@ -179,7 +179,6 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
         // No blacklist service configured, skip check and validate directly
         return validateAndCreateAuth(token);
     }
-
 
     /**
      * Validates JWT, checks issuer/audience, parses roles, and returns Authentication.
@@ -253,7 +252,6 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
         }
     }
 
-
     /**
      * Validates JWT issuer and audience claims.
      * <p>
@@ -279,7 +277,8 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
         } else {
             audiences = Collections.emptyList();
         }
-        audiences = audiences.stream().map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toUnmodifiableList());
+        audiences =
+                audiences.stream().map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toUnmodifiableList());
         // Validate issuer
         if (!expectedIssuer.equals(issuer)) {
             log.warn("JWT issuer mismatch: expected={}, found={}", expectedIssuer, issuer);
@@ -292,7 +291,6 @@ public class ReactiveJwtAuthenticationManager implements ReactiveAuthenticationM
         }
         return true;
     }
-
 
     /**
      * Authenticates the given Authentication object (pass-through).

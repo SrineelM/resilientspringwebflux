@@ -11,34 +11,50 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.kafka.sender.KafkaSender;
-import reactor.kafka.sender.SenderOptions;
 import reactor.kafka.sender.SenderRecord;
 import reactor.util.context.ContextView;
 
 /**
  * ReactiveKafkaProducer is a service for sending messages to Kafka topics using Reactor Kafka.
  *
- * <p>This service uses the KafkaSender bean (configured in KafkaConfig) to send messages
- * reactively. It logs the result of each send operation, including topic, partition, and offset
- * information, or any errors that occur.
+ * <p>This service uses the KafkaSender bean (configured in {@link KafkaProducerConfig}) to send
+ * messages reactively. It logs the result of each send operation, including topic, partition, and
+ * offset information, or any errors that occur.
  *
- * <p>Key points: - This service is only active in non-local/non-dev profiles (see @Profile
- * annotation). - The send method creates a ProducerRecord and wraps it in a SenderRecord for
- * Reactor Kafka. - The message is sent as a Mono, and the result is logged for monitoring and
- * debugging. - Business logic (e.g., message transformation) can be added before sending.
+ * <h2>Backpressure Note</h2>
+ * <p>The {@link KafkaSender} is configured with {@code maxInFlight} (see {@link KafkaProducerConfig})
+ * to cap the number of unacknowledged Kafka send requests in flight at any given time. Without this
+ * bound, a burst of send calls can queue unlimited records in memory, leading to OOM under
+ * sustained load. With {@code maxInFlight}, the sender applies backpressure to the caller once the
+ * limit is reached.
+ *
+ * <p>Key points:
+ * <ul>
+ *   <li>Active only in non-local/non-dev profiles (see {@code @Profile} annotation).</li>
+ *   <li>The {@link #send} method propagates Reactor Context (correlation + trace IDs) into Kafka headers.</li>
+ *   <li>{@link #sendWithHeaders} bypasses Context and uses explicit header maps (used by outbox dispatcher).</li>
+ *   <li>Failed sends are automatically routed to a Dead-Letter Queue (DLQ) topic.</li>
+ * </ul>
  */
 @Service
 @Profile("!local & !dev") // Active only outside local/dev; stubs handle local/dev
 public class ReactiveKafkaProducer implements KafkaProducerPort {
+
     private static final Logger logger = LoggerFactory.getLogger(ReactiveKafkaProducer.class);
+
     private final KafkaSender<String, String> kafkaSender;
     private final String dlqSuffix;
-    // touch TracingHeaderUtil to avoid unused import warning in some incremental analyzers
 
     /**
      * Constructor injects the KafkaSender bean.
      *
-     * @param kafkaSender the reactive Kafka sender bean
+     * <p>The {@code kafkaSender} bean is created in {@link KafkaProducerConfig} with
+     * {@code maxInFlight} configured for bounded in-flight sends. Do NOT create additional
+     * {@link KafkaSender} instances inside this class — each instance opens a Kafka producer
+     * connection.
+     *
+     * @param kafkaSender the reactive Kafka sender bean (with maxInFlight configured)
+     * @param dlqSuffix   suffix appended to the original topic name to form the DLQ topic name
      */
     public ReactiveKafkaProducer(
             KafkaSender<String, String> kafkaSender, @Value("${messaging.kafka.dlq-suffix:-dlq}") String dlqSuffix) {
@@ -50,11 +66,12 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
      * Sends a message to the specified Kafka topic.
      *
      * <p>The message is wrapped in a ProducerRecord and SenderRecord, then sent using KafkaSender.
-     * The result of the send operation is logged, including metadata or errors.
+     * Reactor Context values for {@code correlationId} and {@code traceId} are automatically
+     * propagated as Kafka message headers.
      *
      * @param topic the Kafka topic to send to
-     * @param key the message key
-     * @param value the message value
+     * @param key   the message key (used for partition assignment)
+     * @param value the message value (payload)
      * @return a Mono that completes when the send operation finishes
      */
     public Mono<Void> send(String topic, String key, String value) {
@@ -63,7 +80,15 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
     }
 
     /**
-     * Sends a message using explicit headers (bypasses Reactor Context extraction). Used by outbox dispatcher.
+     * Sends a message using explicit headers (bypasses Reactor Context extraction).
+     *
+     * <p>Used by the outbox dispatcher which manages its own correlation IDs and tracing headers
+     * outside of a WebFlux request context.
+     *
+     * @param topic   the Kafka topic to send to
+     * @param value   the message payload
+     * @param headers explicit key-value headers to attach to the Kafka record
+     * @return a Mono that completes when the send operation finishes
      */
     public Mono<Void> sendWithHeaders(String topic, String value, java.util.Map<String, String> headers) {
         String safeValue = value == null ? "" : value.replaceAll("[\n\r]", "");
@@ -73,6 +98,9 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
             if (v != null) pr.headers().add(k, v.getBytes());
         });
         SenderRecord<String, String, String> record = SenderRecord.create(pr, null);
+        // [BACKPRESSURE] kafkaSender has maxInFlight configured in KafkaProducerConfig.
+        // If the broker is slow and in-flight sends reach the limit, this Mono will signal
+        // backpressure to the caller (e.g., the outbox dispatcher's flatMap concurrency cap).
         return kafkaSender
                 .send(Mono.just(record))
                 .doOnNext(result -> {
@@ -109,6 +137,9 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
         }
 
         SenderRecord<String, String, String> record = SenderRecord.create(producerRecord, key);
+        // [BACKPRESSURE] maxInFlight on KafkaSender (configured in KafkaProducerConfig) ensures
+        // that at most N records are unacknowledged by the broker at once. Exceeding this limit
+        // causes the sender to apply backpressure upstream.
         return kafkaSender
                 .send(Mono.just(record))
                 .doOnNext(result -> {
@@ -145,11 +176,8 @@ public class ReactiveKafkaProducer implements KafkaProducerPort {
         }
     }
 
-    // Enhanced KafkaSender bean with replication.factor property for reliability
-    public KafkaSender<String, String> kafkaSender() {
-        return KafkaSender.create(SenderOptions.<String, String>create().producerProperty("replication.factor", 3));
-    }
-
-    // Note: For full distributed tracing, the consumer should extract trace context from Kafka
-    // headers and start a new span. See OpenTelemetry Kafka instrumentation docs for details.
+    // NOTE: The orphan kafkaSender() method that previously existed here was removed.
+    // It was dead code (not annotated with @Bean and never invoked), and calling it would
+    // have leaked a new KafkaSender connection. Kafka producer configuration now lives
+    // exclusively in KafkaProducerConfig where maxInFlight is also set.
 }

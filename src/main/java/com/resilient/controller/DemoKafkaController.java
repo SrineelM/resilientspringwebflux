@@ -30,6 +30,15 @@ import reactor.core.publisher.Mono;
  * <p>This controller is only active when the "local" profile is enabled. It provides
  * convenient endpoints for developers to test application behavior that depends on
  * producing or consuming Kafka messages, ensuring a lightweight local development experience.
+ *
+ * <h2>Backpressure Strategy</h2>
+ * <ul>
+ *   <li>Produce endpoint: single {@code Mono} — backpressure not applicable.</li>
+ *   <li>Consume SSE endpoint: {@code Flux.interval} is a hot source; {@code onBackpressureLatest}
+ *       is applied so that a slow SSE client always receives the most recent tick rather than
+ *       accumulating stale ones. {@code onErrorResume} replaces the previously unsafe
+ *       {@code onErrorContinue} which bypasses the Reactive Streams error contract.</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/kafka")
@@ -154,13 +163,26 @@ public class DemoKafkaController {
      * a message from a Kafka topic. It sends 10 messages at one-second intervals and is
      * protected by a rate limiter.
      *
+     * <p><strong>Backpressure</strong>: {@code Flux.interval} is a hot timer source. If the SSE
+     * client (subscriber) is slower than 1 event/second, events accumulate. We apply
+     * {@code onBackpressureLatest()} so the subscriber always gets the most recent tick;
+     * intermediate ticks that cannot be delivered are silently discarded (appropriate for
+     * a "current state" simulation). This prevents {@code MissingBackpressureException}
+     * from surfacing on slow connections.
+     *
+     * <p><strong>Error handling</strong>: {@code onErrorResume} (not {@code onErrorContinue}) is
+     * used. {@code onErrorContinue} bypasses the Reactive Streams error contract and behaves
+     * unpredictably with many operators — it was replaced with the standard, safe alternative.
+     *
      * @return A {@link Flux} of strings, where each string is a simulated Kafka message,
      *         formatted as a text/event-stream.
      */
     // Defines an HTTP GET endpoint that produces a Server-Sent Event stream.
     @Operation(
             summary = "Simulate Kafka topic consumption stream",
-            description = "Consumes 10 simulated Kafka messages as Server-Sent Events (SSE) at 1-second intervals.")
+            description = "Consumes 10 simulated Kafka messages as Server-Sent Events (SSE) at 1-second intervals."
+                    + " Applies onBackpressureLatest so slow clients receive the newest tick, not a backlog."
+                    + " Uses onErrorResume (safe) instead of onErrorContinue (unsafe).")
     @ApiResponses(
             value = {
                 @ApiResponse(
@@ -178,18 +200,28 @@ public class DemoKafkaController {
         Flux<Long> intervalFlux = Flux.interval(Duration.ofSeconds(1));
 
         // If a rate limiter is present, apply it to control the message flow.
-        // The rate limiter checks if requests are allowed, but doesn't directly limit the Flux.
-        // For demo purposes, we'll simulate rate limiting by checking periodically.
         Flux<Long> rateLimitedFlux = rateLimiter
                 .map(limiter -> intervalFlux.filterWhen(i -> limiter.isAllowed("kafka-demo")))
                 .orElse(intervalFlux);
 
         return rateLimitedFlux
+                // [BACKPRESSURE - FIX] Flux.interval is a hot source that emits unconditionally.
+                // onBackpressureLatest keeps only the most recently emitted tick when the downstream
+                // (SSE client) is slower than the interval. This prevents MissingBackpressureException
+                // and ensures the client sees current data rather than a growing backlog.
+                // Previously there was NO backpressure strategy here, which was a latent bug.
+                .onBackpressureLatest()
                 // Transform each number into a simulated message string.
                 .map(i -> "Demo Kafka message #" + i)
                 // Limit the stream to the first 10 messages, then it will complete.
                 .take(10)
-                // If an error were to occur, log it but allow the stream to continue.
-                .onErrorContinue((ex, val) -> log.error("Kafka consume error", ex));
+                // [FIX] Replaced unsafe onErrorContinue with standard onErrorResume.
+                // onErrorContinue bypasses the Reactive Streams error contract and can cause
+                // unpredictable behaviour with map/flatMap operators. onErrorResume handles
+                // errors at the stream level with a predictable, spec-compliant fallback.
+                .onErrorResume(ex -> {
+                    log.error("Kafka consume stream error, completing stream gracefully", ex);
+                    return Flux.empty();
+                });
     }
 }

@@ -98,14 +98,26 @@ public class UserService {
 
     @Observed(name = "user.find.all")
     public Flux<UserResponse> findAll() {
-        return userRepository.findAll().map(UserResponse::from).doOnComplete(() -> log.debug("Retrieved all users"));
+        // [BACKPRESSURE] limitRate(100) controls how many rows R2DBC prefetches at once.
+        // Without this, the driver may buffer the entire table result set in memory before
+        // the subscriber has a chance to consume it. 100 rows per request(n) is a safe default
+        // that balances throughput and memory usage.
+        return userRepository
+                .findAll()
+                .limitRate(100)
+                .map(UserResponse::from)
+                .doOnComplete(() -> log.debug("Retrieved all users"));
     }
 
     @Observed(name = "user.search")
     public Flux<UserResponse> searchUsers(String query) {
         String pattern = "%" + query + "%";
+        // [BACKPRESSURE] limitRate(100) caps R2DBC row prefetch for search results.
+        // A broad search pattern could match thousands of rows; prefetching them all at once
+        // would spike memory usage. limitRate ensures the subscriber drives the fetch rate.
         return userRepository
                 .findByUsernameOrEmailContaining(pattern)
+                .limitRate(100)
                 .map(UserResponse::from)
                 .doOnComplete(() -> log.debug("Search completed for query: {}", query));
     }

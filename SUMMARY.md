@@ -81,13 +81,26 @@
 - Troubleshooting section
 - Links to all documentation
 
-### 5. ✅ Backpressure Implementation
-- **File**: `AuditService.java` (Updated)
-- **Feature**: Added explicit backpressure handling for event streams
-- **Solution**:
-  - Implemented `auditEventStream` with `onBackpressureBuffer`
-  - Added bounded buffer with `DROP_OLDEST` strategy to prevent OOM
-  - Added comprehensive unit tests and documentation updates
+### 5. ✅ Backpressure Implementation — Production-Grade Fixes
+
+**Date**: August 2026 | **Severity**: P1–P3 across 8 files
+
+#### Root Causes Fixed
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| 1 | `ReactiveKafkaConsumer` | `@KafkaListener` committed offsets before reactive pipeline finished → silent message loss; unbounded `.subscribe()` | Replaced with `KafkaReceiver`; offset acknowledged **after** processing; `flatMap(..., concurrencyLimit)` caps parallelism |
+| 2 | `DemoKafkaController` | `onErrorContinue` bypasses Reactive Streams error contract; no backpressure on hot `Flux.interval` | Replaced with `onErrorResume`; added `onBackpressureLatest()` before `.map()` |
+| 3 | `ReactiveActiveMqConsumer` | Unbounded `Sinks.Many` buffer (OOM risk); `tryEmitNext` result silently ignored | Bounded buffer (1 000 items); `EmitResult` checked; overflow routed to DLQ |
+| 4 | `ReactiveStreamController` | `bufferSize` dual-used for backpressure count AND file byte chunks (50-byte chunks!); `throw` in `doOnError`; unnecessary buffer on cold `Flux.range`; `DataBufferFactory` allocated per-request | Split into `backpressureBufferSize` + `fileChunkBytes` (64 KB default); removed `throw`; removed redundant operator; shared factory bean |
+| 5 | `ReactiveKafkaProducer` | Orphan `kafkaSender()` leaked Kafka producer connections; no `maxInFlight` cap | Removed dead code; `maxInFlight` configured in `KafkaProducerConfig` |
+| 6 | `KafkaProducerConfig` | No `maxInFlight` on `SenderOptions` → unbounded in-flight sends under burst | Added configurable `maxInFlight(256)` |
+| 7 | `OutboxDispatcher` | Hardcoded concurrency `4`; scheduler could fire overlapping polls | Concurrency `@Value`-configurable; `AtomicBoolean` guard prevents overlap |
+| 8 | `UserService` | Unbounded `findAll` / `searchUsers` — no R2DBC prefetch limit | Added `.limitRate(100)` to both methods |
+
+#### New Tests Added
+- `ReactiveKafkaConsumerTest` — empty receiver, single-record offset acknowledge, multi-record emit
+- `ReactiveActiveMqConsumerTest` — happy path emit, DLQ on forced error, destination filtering, multicast
 
 ---
 

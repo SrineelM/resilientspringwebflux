@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.MediaType;
@@ -43,6 +44,16 @@ import reactor.core.publisher.Mono;
  *   <li>Newline-Delimited JSON (NDJSON) for efficient streaming of multiple JSON objects.</li>
  *   <li>Large file streaming with support for HTTP caching headers (ETag and Last-Modified).</li>
  * </ul>
+ *
+ * <h2>Backpressure Strategy</h2>
+ * <ul>
+ *   <li>SSE: {@code onBackpressureDrop} applied <em>before</em> map to avoid allocating objects
+ *       that will be discarded. Drop events are logged as warnings.</li>
+ *   <li>NDJSON: {@code Flux.range} is a cold, cooperative source that already honours
+ *       downstream demand natively — no explicit backpressure operator needed.</li>
+ *   <li>File: {@code DataBufferUtils.read} streams in configurable chunks; the WebFlux
+ *       response sink requests chunks on demand (Reactive Streams pull model).</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/stream")
@@ -57,23 +68,56 @@ public class ReactiveStreamController {
     // Logger for this controller.
     private static final Logger log = LoggerFactory.getLogger(ReactiveStreamController.class);
 
-    // Configurable buffer size for backpressure handling, defaults to 50.
-    @Value("${streaming.buffer.size:50}")
-    private int bufferSize;
+    // ---------------------------------------------------------------------------
+    // BACKPRESSURE CONFIG — two separate properties, formerly conflated as one.
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Maximum number of items to buffer in reactive backpressure buffers (e.g. NDJSON overflow).
+     * Kept separate from the file chunk size to avoid semantic confusion.
+     * Default: 50 items.
+     */
+    @Value("${streaming.backpressure.buffer.size:50}")
+    private int backpressureBufferSize;
+
+    /**
+     * Chunk size (bytes) used when reading files reactively with {@code DataBufferUtils.read}.
+     * Using a larger chunk (64 KB default) gives much better I/O throughput than the old
+     * 50-byte value that was previously shared with {@code backpressureBufferSize}.
+     * Default: 65536 bytes (64 KB).
+     */
+    @Value("${streaming.file.chunk.bytes:65536}")
+    private int fileChunkBytes;
 
     // Path to a sample file used for the file streaming endpoint.
     private final Path sampleFilePath = Path.of("src/main/resources/sample.json");
 
     /**
+     * Shared, singleton {@link DataBufferFactory} used for file streaming.
+     *
+     * <p><strong>Backpressure note</strong>: using a shared factory (instead of constructing
+     * one per-request) avoids unnecessary object allocation on the hot path. The factory itself
+     * is stateless and thread-safe.
+     */
+    private final DataBufferFactory dataBufferFactory = new DefaultDataBufferFactory();
+
+    /**
      * Streams user data to the client as Server-Sent Events (SSE).
      * SSE is ideal for pushing real-time updates from the server to the client over a single connection.
+     *
+     * <p><strong>Backpressure</strong>: {@code Flux.interval} is a hot, timer-driven source that
+     * produces items regardless of downstream demand. {@code onBackpressureDrop} is placed
+     * <em>before</em> {@code .map()} so that ticks are discarded <em>before</em> the more
+     * expensive {@link UserResponse} object is allocated — avoiding wasted CPU when the
+     * SSE client (e.g. a slow network connection) cannot keep up.
      *
      * @return A {@link Flux} of {@link UserResponse} objects, which Spring WebFlux will format as an SSE stream.
      */
     @Operation(
             summary = "Stream users via Server-Sent Events (SSE)",
             description =
-                    "Pushes 10 user items spaced 1 second apart over a reactive text/event-stream connection with backpressure drop handling.")
+                    "Pushes 10 user items spaced 1 second apart over a reactive text/event-stream connection."
+                            + " Uses onBackpressureDrop (applied before map) so slow clients shed load without blocking the timer thread.")
     @ApiResponses(
             value = {
                 @ApiResponse(
@@ -87,15 +131,18 @@ public class ReactiveStreamController {
             })
     @GetMapping(value = "/sse/users", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<UserResponse> streamUsersSse() {
-        // Create a stream that emits a new number every second.
+        // Create a stream that emits a new number every second (hot source).
         return Flux.interval(Duration.ofSeconds(1))
                 // Limit the stream to 10 emissions, after which it will complete.
                 .take(10)
-                // Transform each emitted number into a new UserResponse object.
+                // [BACKPRESSURE - FIX] onBackpressureDrop is placed HERE, before .map(), so that
+                // raw Long ticks are discarded before we allocate a UserResponse object.
+                // Previously this was after .map(), wasting allocation on items that get dropped.
+                // Strategy: DROP — suitable for SSE where the newest events are most relevant.
+                .onBackpressureDrop(tick ->
+                        log.warn("[BACKPRESSURE] SSE tick {} dropped — client is slower than 1 event/sec", tick))
+                // Transform each surviving tick into a UserResponse.
                 .map(i -> UserResponse.from(User.create("User" + i, "user" + i + "@example.com", "User " + i)))
-                // If the client (subscriber) cannot process items as fast as they are produced, drop the item and log a
-                // warning.
-                .onBackpressureDrop(user -> log.warn("Dropping user due to backpressure: {}", user.username()))
                 // Set a 2-minute timeout for the entire stream to prevent it from running indefinitely.
                 .timeout(Duration.ofMinutes(2))
                 // Log any error that terminates the stream.
@@ -108,12 +155,19 @@ public class ReactiveStreamController {
      * Streams user data as newline-delimited JSON (NDJSON).
      * NDJSON is a convenient format for streaming sequences of JSON objects without a top-level array.
      *
+     * <p><strong>Backpressure</strong>: {@code Flux.range} is a <em>cold, synchronous, bounded</em>
+     * source. It already implements the Reactive Streams pull model natively — it pauses emission
+     * until the downstream subscriber requests more items. Therefore <em>no explicit backpressure
+     * operator is needed here</em>. Adding {@code onBackpressureBuffer} to a cooperative cold source
+     * would be redundant overhead and was removed.
+     *
      * @return A {@link Flux} of {@link UserResponse} objects, which Spring WebFlux will format as an NDJSON stream.
      */
     @Operation(
             summary = "Stream users as Newline-Delimited JSON (NDJSON)",
-            description =
-                    "Streams user JSON objects separated by newlines (application/x-ndjson) with configurable backpressure buffering.")
+            description = "Streams user JSON objects separated by newlines (application/x-ndjson)."
+                    + " Flux.range is a cooperative cold source — backpressure is handled natively by the"
+                    + " Reactive Streams pull protocol; no extra buffer operator required.")
     @ApiResponses(
             value = {
                 @ApiResponse(
@@ -127,13 +181,12 @@ public class ReactiveStreamController {
             })
     @GetMapping(value = "/ndjson/users", produces = MediaType.APPLICATION_NDJSON_VALUE)
     public Flux<UserResponse> streamUsersNdjson() {
-        // Create a stream of 10 numbers, emitted as quickly as possible.
+        // [BACKPRESSURE] Flux.range is a cold, cooperative source: it respects downstream demand
+        // by only producing items when the subscriber calls request(n). No onBackpressureBuffer
+        // operator is required — the Reactive Streams protocol itself provides the back-pressure.
         return Flux.range(1, 10)
                 // Transform each number into a new UserResponse object.
                 .map(i -> UserResponse.from(User.create("User" + i, "user" + i + "@example.com", "User " + i)))
-                // If the client can't keep up, buffer up to `bufferSize` items. If the buffer fills, drop the latest
-                // item.
-                .onBackpressureBuffer(bufferSize, v -> {}, reactor.core.publisher.BufferOverflowStrategy.DROP_LATEST)
                 // Set a 2-minute timeout for the entire stream.
                 .timeout(Duration.ofMinutes(2))
                 // Log any error that terminates the stream.
@@ -146,13 +199,20 @@ public class ReactiveStreamController {
      * Streams a file to the client reactively, with support for HTTP caching headers.
      * This approach is memory-efficient for large files as it streams them in chunks.
      *
+     * <p><strong>Backpressure</strong>: {@code DataBufferUtils.read} implements the Reactive Streams
+     * publisher contract. The WebFlux HTTP response sink requests the next chunk only after the
+     * previous one has been written to the network. This provides implicit chunk-level backpressure
+     * without any explicit operator. The chunk size is controlled by {@code fileChunkBytes}
+     * (default 64 KB), now separate from the reactive buffer size config.
+     *
      * @param request The incoming server request, used to check for caching headers.
      * @return A {@link Mono} containing a {@link ResponseEntity} with the file stream or a 304 Not Modified status.
      */
     @Operation(
             summary = "Stream file with conditional HTTP caching",
-            description =
-                    "Streams file content in non-blocking DataBuffer chunks with ETag and Last-Modified caching validation headers.")
+            description = "Streams file content in non-blocking DataBuffer chunks (default 64 KB) with ETag and"
+                    + " Last-Modified caching validation headers. Backpressure is implicit: the response"
+                    + " sink pulls one chunk at a time via the Reactive Streams request(n) protocol.")
     @ApiResponses(
             value = {
                 @ApiResponse(
@@ -235,18 +295,18 @@ public class ReactiveStreamController {
         }
 
         // --- File Streaming ---
-        // If no cache match, stream the file content.
-        DefaultDataBufferFactory factory = new DefaultDataBufferFactory();
-        // Read the file reactively in chunks of `bufferSize` bytes. This is non-blocking and memory-efficient.
-        Flux<DataBuffer> data = DataBufferUtils.read(sampleFilePath, factory, bufferSize)
+        // [BACKPRESSURE] DataBufferUtils.read publishes file chunks as a Reactive Streams Flux.
+        // The WebFlux HTTP layer calls request(1) for each chunk after writing the previous one
+        // to the network — providing implicit pull-based backpressure without any extra operator.
+        // fileChunkBytes (default 64 KB) controls memory per chunk; larger = fewer round trips.
+        // [FIX] Use the shared dataBufferFactory (singleton) instead of allocating one per-request.
+        Flux<DataBuffer> data = DataBufferUtils.read(sampleFilePath, dataBufferFactory, fileChunkBytes)
                 // Set a timeout for the streaming operation itself.
                 .timeout(Duration.ofMinutes(2))
-                // Define what to do if an error occurs during the stream.
-                .doOnError(ex -> {
-                    log.error("File streaming error for path {}", sampleFilePath, ex);
-                    // Throw a web-friendly exception if something goes wrong.
-                    throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Error streaming file", ex);
-                })
+                // [FIX] doOnError is a SIDE-EFFECT operator — throwing inside it causes
+                // undefined behaviour and can swallow the original exception.
+                // We only log here; the actual exception transformation is done by onErrorMap below.
+                .doOnError(ex -> log.error("File streaming error for path {}", sampleFilePath, ex))
                 // Log when the file stream completes, errors, or is cancelled.
                 .doFinally(sig -> log.info("File stream completed with signal: {}", sig))
                 // Specifically map IOExceptions to a 500 Internal Server Error.

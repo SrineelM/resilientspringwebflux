@@ -111,6 +111,48 @@ Messaging Reliability Architecture
 4. Tracing
     - `TracingHeaderUtil` ensures W3C `traceparent` header generation; reused across outbox, Kafka, ActiveMQ.
 
+Backpressure Architecture
+--------------------------
+
+Every reactive pipeline in this project has an explicit backpressure strategy. The table below
+documents where each strategy is applied and why.
+
+| Layer | Component | Strategy | Rationale |
+|-------|-----------|----------|-----------|
+| HTTP SSE | `ReactiveStreamController.streamUsersSse()` | `onBackpressureDrop` (before `.map()`) | `Flux.interval` is a hot source. Ticks are dropped **before** object allocation so slow SSE clients don't waste CPU. |
+| HTTP NDJSON | `ReactiveStreamController.streamUsersNdjson()` | Native Reactive Streams pull | `Flux.range` is a cold, cooperative source; no extra operator needed. |
+| HTTP File | `ReactiveStreamController.streamFile()` | `DataBufferUtils.read` chunk pull | WebFlux response sink calls `request(1)` per chunk; `fileChunkBytes` (default 64 KB) controls memory per chunk. |
+| Kafka SSE sim | `DemoKafkaController.consumeMessages()` | `onBackpressureLatest()` | Hot interval source; slow SSE client always gets the newest tick. `onErrorResume` (not `onErrorContinue`) used for safe error handling. |
+| Kafka Consumer | `ReactiveKafkaConsumer` | `KafkaReceiver` pull + `flatMap(..., N)` | True Reactive Streams pull: Kafka poll loop respects `request(n)`. `concurrencyLimit` caps parallel processing. Offset acknowledged **after** processing. |
+| Kafka Producer | `KafkaProducerConfig` → `KafkaSender` | `maxInFlight(256)` | Caps unacknowledged sends in flight; prevents memory growth under burst producer traffic. |
+| ActiveMQ Consumer | `ReactiveActiveMqConsumer` | Bounded `Sinks.Many` buffer (1 000) | Prevents OOM when subscribers are slow. `EmitResult` checked; overflow messages routed to DLQ instead of silently dropped. |
+| Outbox Dispatcher | `OutboxDispatcher.dispatchBatch()` | `flatMap(..., dispatchConcurrency)` | Configurable concurrency cap prevents broker/DB overload. `AtomicBoolean` guard prevents overlapping scheduler invocations. |
+| Database | `UserService.findAll()` / `searchUsers()` | `.limitRate(100)` | Caps R2DBC row prefetch so large tables don't buffer entire result sets in memory. |
+
+### Configuration Properties
+
+```yaml
+# Reactive Stream backpressure buffers
+streaming.backpressure.buffer.size: 50      # items buffered before drop
+
+# File streaming chunk size (64 KB default for good I/O throughput)
+streaming.file.chunk.bytes: 65536
+
+# Kafka consumer
+messaging.kafka.consumer.concurrency: 4    # max parallel records processed
+messaging.kafka.dlq-suffix: -dlq           # DLQ topic suffix
+
+# Kafka producer
+messaging.kafka.producer.max-in-flight: 256 # max unacked sends
+
+# ActiveMQ consumer sink
+activemq.consumer.sink.buffer.capacity: 1000 # max buffered JMS messages
+
+# Outbox dispatcher
+outbox.dispatch.concurrency: 4             # max parallel event dispatches
+outbox.dispatch.batchSize: 25              # SQL LIMIT per poll cycle
+```
+
 Security Enhancements
 
 Implemented recommendations from security review:

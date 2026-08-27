@@ -1,10 +1,11 @@
 package com.resilient.messaging;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.kafka.sender.KafkaSender;
@@ -12,11 +13,19 @@ import reactor.test.StepVerifier;
 
 @ExtendWith(MockitoExtension.class)
 class ReactiveKafkaProducerTest {
+
     @Mock
     KafkaSender<String, String> sender;
 
-    @InjectMocks
-    ReactiveKafkaProducer producer = new ReactiveKafkaProducer(sender, "-dlq");
+    // Construct manually in @BeforeEach so the mock is fully initialised before use.
+    // Using @InjectMocks with an inline initializer can result in null mocks depending
+    // on Mockito's injection order and the presence of @Value-annotated fields.
+    ReactiveKafkaProducer producer;
+
+    @BeforeEach
+    void setUp() {
+        producer = new ReactiveKafkaProducer(sender, "-dlq");
+    }
 
     @Test
     void sendWithHeadersHappyPath() {

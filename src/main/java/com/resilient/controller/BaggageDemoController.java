@@ -1,6 +1,15 @@
 package com.resilient.controller;
 
 import io.micrometer.tracing.Tracer;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -10,17 +19,21 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Demonstration controller for Micrometer Baggage functionality.
- * <p>
- * This controller showcases how to work with Micrometer baggage in a Spring WebFlux application.
+ *
+ * <p>This controller showcases how to work with Micrometer baggage in a Spring WebFlux application.
  * Baggage allows you to propagate custom key-value pairs across service boundaries and correlate
  * them with logs and traces.
- * <p>
- * Key concepts demonstrated:
+ *
+ * <p>Key concepts demonstrated:
  * - Reading baggage values from the current tracing context
  * - Comparing baggage values with incoming HTTP headers
  * - Understanding baggage propagation and correlation
  */
 @RestController
+@Tag(
+        name = "Observability & Baggage",
+        description = "Demonstrates distributed context propagation and Micrometer Baggage correlation")
+@SecurityRequirement(name = "bearerAuth")
 public class BaggageDemoController {
 
     /** Micrometer tracer for accessing baggage from the current tracing context */
@@ -37,17 +50,17 @@ public class BaggageDemoController {
 
     /**
      * Demonstrates baggage functionality by showing current baggage values and comparing them with headers.
-     * <p>
-     * This endpoint accepts optional headers that represent common context information:
+     *
+     * <p>This endpoint accepts optional headers that represent common context information:
      * - X-Correlation-Id: Unique request identifier for tracing across services
      * - X-User-Id: Current user identifier for authorization and auditing
      * - X-Tenant-Id: Multi-tenant application identifier for data isolation
-     * <p>
-     * The response includes both:
+     *
+     * <p>The response includes both:
      * - baggage.*: Values retrieved from the current tracing baggage context
      * - header.*: Values directly from the incoming HTTP headers
-     * <p>
-     * Use this endpoint to understand:
+     *
+     * <p>Use this endpoint to understand:
      * - How baggage propagates across service calls
      * - When baggage values are set vs. when they're null
      * - The difference between headers and baggage context
@@ -57,11 +70,59 @@ public class BaggageDemoController {
      * @param tenantId Optional tenant ID header
      * @return Map containing both baggage and header values for comparison
      */
+    @Operation(
+            summary = "Inspect distributed baggage and incoming headers",
+            description =
+                    "Reads W3C baggage values from the current Micrometer tracing span and compares them against incoming HTTP headers (X-Correlation-Id, X-User-Id, X-Tenant-Id).")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Baggage and header comparison payload",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        examples =
+                                                @ExampleObject(
+                                                        name = "BaggageInspection",
+                                                        value =
+                                                                """
+                                {
+                                  "baggage.correlationId": "c0a80101-8c4d-4b92-9e23-283948123abc",
+                                  "baggage.userId": "user-42",
+                                  "baggage.tenantId": "tenant-corp",
+                                  "header.correlationId": "c0a80101-8c4d-4b92-9e23-283948123abc",
+                                  "header.userId": "user-42",
+                                  "header.tenantId": "tenant-corp"
+                                }
+                                """)))
+            })
     @GetMapping(path = "/demo/baggage", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> demo(
-            @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId) {
+            @Parameter(
+                            name = "X-Correlation-Id",
+                            in = ParameterIn.HEADER,
+                            description = "Unique correlation identifier for end-to-end tracing",
+                            required = false,
+                            example = "c0a80101-8c4d-4b92-9e23-283948123abc")
+                    @RequestHeader(value = "X-Correlation-Id", required = false)
+                    String correlationId,
+            @Parameter(
+                            name = "X-User-Id",
+                            in = ParameterIn.HEADER,
+                            description = "User identifier for audit and contextual logging",
+                            required = false,
+                            example = "user-42")
+                    @RequestHeader(value = "X-User-Id", required = false)
+                    String userId,
+            @Parameter(
+                            name = "X-Tenant-Id",
+                            in = ParameterIn.HEADER,
+                            description = "Tenant identifier for multi-tenant isolation",
+                            required = false,
+                            example = "tenant-corp")
+                    @RequestHeader(value = "X-Tenant-Id", required = false)
+                    String tenantId) {
         Map<String, Object> out = new HashMap<>();
 
         // Retrieve values from the current baggage context (if any exist)

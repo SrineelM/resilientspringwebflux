@@ -1,9 +1,9 @@
 ---
 # Comprehensive Architectural Review
 
-**Project:** Resilient Spring WebFlux POC  
-**Review Date:** November 1, 2025  
-**Reviewer:** Senior Java Architect (AI Assistant)  
+**Project:** Resilient Spring WebFlux POC
+**Review Date:** November 1, 2025
+**Reviewer:** Senior Java Architect (AI Assistant)
 **Audience:** Architects and Developers (Reference/Learning Project)
 ---
 
@@ -327,6 +327,7 @@ circuitbreaker:
 
 ### 7.3 Backpressure ✅
 - ✅ Reactive streams naturally handle backpressure
+- ✅ Explicit backpressure handling implemented in `AuditService.auditEventStream` using `onBackpressureBuffer`
 - ✅ Buffering strategies in place (outbox batching)
 - ✅ Flow control in Kafka/ActiveMQ consumers
 

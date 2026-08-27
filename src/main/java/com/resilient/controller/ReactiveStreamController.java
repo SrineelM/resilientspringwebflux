@@ -6,6 +6,16 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 import com.resilient.dto.UserResponse;
 import com.resilient.model.User;
 import io.micrometer.observation.annotation.Observed;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -37,6 +47,11 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/stream")
 @Observed
+@Tag(
+        name = "Reactive Streaming",
+        description =
+                "Demonstrates non-blocking streaming patterns (Server-Sent Events, NDJSON, and chunked binary streaming with ETag caching)")
+@SecurityRequirement(name = "bearerAuth")
 public class ReactiveStreamController {
 
     // Logger for this controller.
@@ -55,6 +70,21 @@ public class ReactiveStreamController {
      *
      * @return A {@link Flux} of {@link UserResponse} objects, which Spring WebFlux will format as an SSE stream.
      */
+    @Operation(
+            summary = "Stream users via Server-Sent Events (SSE)",
+            description =
+                    "Pushes 10 user items spaced 1 second apart over a reactive text/event-stream connection with backpressure drop handling.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "SSE connection established and active",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT")
+            })
     @GetMapping(value = "/sse/users", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<UserResponse> streamUsersSse() {
         // Create a stream that emits a new number every second.
@@ -80,6 +110,21 @@ public class ReactiveStreamController {
      *
      * @return A {@link Flux} of {@link UserResponse} objects, which Spring WebFlux will format as an NDJSON stream.
      */
+    @Operation(
+            summary = "Stream users as Newline-Delimited JSON (NDJSON)",
+            description =
+                    "Streams user JSON objects separated by newlines (application/x-ndjson) with configurable backpressure buffering.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "NDJSON streaming response",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_NDJSON_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT")
+            })
     @GetMapping(value = "/ndjson/users", produces = MediaType.APPLICATION_NDJSON_VALUE)
     public Flux<UserResponse> streamUsersNdjson() {
         // Create a stream of 10 numbers, emitted as quickly as possible.
@@ -104,9 +149,54 @@ public class ReactiveStreamController {
      * @param request The incoming server request, used to check for caching headers.
      * @return A {@link Mono} containing a {@link ResponseEntity} with the file stream or a 304 Not Modified status.
      */
+    @Operation(
+            summary = "Stream file with conditional HTTP caching",
+            description =
+                    "Streams file content in non-blocking DataBuffer chunks with ETag and Last-Modified caching validation headers.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "File chunk stream successfully initiated",
+                        headers = {
+                            @Header(
+                                    name = "ETag",
+                                    description = "Entity tag for cache validation",
+                                    schema = @Schema(type = "string")),
+                            @Header(
+                                    name = "Last-Modified",
+                                    description = "Last modification epoch timestamp",
+                                    schema = @Schema(type = "integer"))
+                        },
+                        content = @Content(mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE)),
+                @ApiResponse(
+                        responseCode = "304",
+                        description =
+                                "Not Modified (cached content is fresh based on If-None-Match or If-Modified-Since)",
+                        content = @Content),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT"),
+                @ApiResponse(responseCode = "404", description = "Target sample file not found"),
+                @ApiResponse(responseCode = "500", description = "I/O streaming error")
+            })
     @GetMapping(value = "/file", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     @Observed(name = "file.stream", contextualName = "stream-file")
-    public Mono<ResponseEntity<Flux<DataBuffer>>> streamFile(ServerHttpRequest request) {
+    public Mono<ResponseEntity<Flux<DataBuffer>>> streamFile(
+            @Parameter(hidden = true) ServerHttpRequest request,
+            @Parameter(
+                            name = "If-None-Match",
+                            in = ParameterIn.HEADER,
+                            description = "ETag from previous response for conditional GET",
+                            required = false,
+                            example = "\"184-1724745600000\"")
+                    @RequestHeader(name = "If-None-Match", required = false)
+                    String ifNoneMatchHeader,
+            @Parameter(
+                            name = "If-Modified-Since",
+                            in = ParameterIn.HEADER,
+                            description = "Timestamp for conditional GET",
+                            required = false)
+                    @RequestHeader(name = "If-Modified-Since", required = false)
+                    String ifModifiedSinceHeader) {
         // First, check if the requested file actually exists on the server.
         if (!sampleFilePath.toFile().exists()) {
             log.error("Sample file not found: {}", sampleFilePath);

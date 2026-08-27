@@ -1,7 +1,18 @@
 package com.resilient.controller;
 
+import com.resilient.dto.ErrorResponse;
 import com.resilient.security.JwtUtil;
 import com.resilient.security.TokenBlacklistService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Duration;
@@ -9,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,11 +31,15 @@ import reactor.core.publisher.Mono;
 /**
  * Handles JWT-based authentication and session management.
  *
- * <p>This controller provides endpoints for user login, secure logout via token blacklisting,
- * and token refreshing. It integrates with Spring Security and follows reactive principles.
+ * <p>
+ * This controller provides endpoints for user login, secure logout via token
+ * blacklisting,
+ * and token refreshing. It integrates with Spring Security and follows reactive
+ * principles.
  */
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Authentication", description = "Endpoints for JWT authentication, token refresh, and session logout")
 public class JwtAuthController {
 
     private final JwtUtil jwtUtil;
@@ -34,12 +50,14 @@ public class JwtAuthController {
     /**
      * Constructs the controller with necessary security components.
      *
-     * @param jwtUtil Utility for creating and validating JWTs.
-     * @param passwordEncoder Service for encoding and verifying passwords.
+     * @param jwtUtil            Utility for creating and validating JWTs.
+     * @param passwordEncoder    Service for encoding and verifying passwords.
      * @param userDetailsService Service to load user-specific data.
-     * @param blacklistService Service to manage blacklisted (logged-out) tokens. This can be
-     *                         an in-memory implementation for development or a distributed one
-     *                         (like Redis) for production.
+     * @param blacklistService   Service to manage blacklisted (logged-out) tokens.
+     *                           This can be
+     *                           an in-memory implementation for development or a
+     *                           distributed one
+     *                           (like Redis) for production.
      */
     public JwtAuthController(
             JwtUtil jwtUtil,
@@ -57,21 +75,80 @@ public class JwtAuthController {
      * Data Transfer Object for the login request body.
      * Ensures username and password are not blank.
      */
-    public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
+    @Schema(description = "User login credentials payload")
+    public record LoginRequest(
+            @Schema(
+                            description = "User's registered username",
+                            example = "user",
+                            requiredMode = Schema.RequiredMode.REQUIRED)
+                    @NotBlank(message = "Username cannot be blank")
+                    String username,
+            @Schema(
+                            description = "User's account password",
+                            example = "password",
+                            format = "password",
+                            requiredMode = Schema.RequiredMode.REQUIRED)
+                    @NotBlank(message = "Password cannot be blank")
+                    String password) {}
 
     /**
      * Handles user login by validating credentials and issuing a JWT.
      *
      * @param req The login request containing the username and password.
-     * @return A {@link Mono} containing a {@link ResponseEntity}. On success, it returns a 200 OK
-     *         with the JWT and its expiration time. On failure, it returns a 401 Unauthorized.
+     * @return A {@link Mono} containing a {@link ResponseEntity}. On success, it
+     *         returns a 200 OK
+     *         with the JWT and its expiration time. On failure, it returns a 401
+     *         Unauthorized.
      */
-    @PostMapping("/login")
+    @Operation(
+            summary = "Authenticate user and issue JWT",
+            description =
+                    "Validates username and password credentials against the reactive user details store. On success, returns a signed JWT bearer token and its expiry timestamp.",
+            security = {})
+    @SecurityRequirements
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Authentication successful, JWT token issued",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        examples =
+                                                @ExampleObject(
+                                                        name = "SuccessResponse",
+                                                        value =
+                                                                """
+                                {
+                                  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                  "expires_in": "2026-08-27T09:30:00Z"
+                                }
+                                """))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid login request payload (e.g., blank username or password)",
+                        content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                @ApiResponse(
+                        responseCode = "401",
+                        description = "Invalid credentials (username not found or password mismatch)",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        examples =
+                                                @ExampleObject(
+                                                        name = "UnauthorizedResponse",
+                                                        value = "{\"error\": \"Invalid credentials\"}")))
+            })
+    @PostMapping(
+            value = "/login",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<ResponseEntity<Map<String, Object>>> login(@Valid @RequestBody LoginRequest req) {
         // Find the user by their username from the user details service.
         return userDetailsService
                 .findByUsername(req.username())
-                // Filter the stream: only continue if the provided password matches the stored hash.
+                // Filter the stream: only continue if the provided password matches the stored
+                // hash.
                 .filter(ud -> passwordEncoder.matches(req.password(), ud.getPassword()))
                 // If authentication is successful, map the user details to a response entity.
                 .map(ud -> {
@@ -88,7 +165,8 @@ public class JwtAuthController {
                     // Return an HTTP 200 OK response with the token.
                     return ResponseEntity.ok(body);
                 })
-                // If the stream was empty (user not found or password didn't match), switch to this Mono.
+                // If the stream was empty (user not found or password didn't match), switch to
+                // this Mono.
                 .switchIfEmpty(Mono.just(
                         ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid credentials"))));
     }
@@ -98,12 +176,21 @@ public class JwtAuthController {
      * The token is blacklisted for its remaining validity period, preventing reuse.
      *
      * @param authHeader The 'Authorization' header containing the "Bearer" token.
-     * @return A {@link Mono} completing with a 204 No Content on success, 400 Bad Request if the
-     *         token is missing/malformed, or 500 Internal Server Error if blacklisting fails.
+     * @return A {@link Mono} completing with a 204 No Content on success, 400 Bad
+     *         Request if the
+     *         token is missing/malformed, or 500 Internal Server Error if
+     *         blacklisting fails.
      */
     @PostMapping("/logout")
     public Mono<ResponseEntity<Void>> logout(
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @Parameter(
+                            name = "Authorization",
+                            in = ParameterIn.HEADER,
+                            description = "JWT Bearer token to invalidate (Format: 'Bearer <token>')",
+                            required = true,
+                            example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+                    @RequestHeader(name = "Authorization", required = false)
+                    String authHeader) {
         // Validate that the Authorization header is present and starts with "Bearer ".
         if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
             return Mono.just(ResponseEntity.badRequest().build()); // Return 400 if header is invalid.
@@ -124,11 +211,13 @@ public class JwtAuthController {
         // Add the token to the blacklist with its remaining TTL.
         return blacklistService
                 .blacklistToken(token, ttl)
-                // After blacklisting succeeds, chain to a Mono that completes the HTTP response.
+                // After blacklisting succeeds, chain to a Mono that completes the HTTP
+                // response.
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()))
                 // If an error occurs during blacklisting (e.g., Redis is down), handle it.
                 .onErrorResume(ex -> {
-                    // Fail-closed security: if we can't blacklist, deny the logout to signal a problem.
+                    // Fail-closed security: if we can't blacklist, deny the logout to signal a
+                    // problem.
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                             .build());
                 });
@@ -138,12 +227,45 @@ public class JwtAuthController {
      * Refreshes an existing JWT, issuing a new one with a renewed expiration.
      * This requires the old token to be valid and not blacklisted.
      *
-     * @param authHeader The 'Authorization' header containing the "Bearer" token to be refreshed.
-     * @return A {@link Mono} containing a 200 OK with the new token on success, or 401 Unauthorized on failure.
+     * @param authHeader The 'Authorization' header containing the "Bearer" token to
+     *                   be refreshed.
+     * @return A {@link Mono} containing a 200 OK with the new token on success, or
+     *         401 Unauthorized on failure.
      */
-    @PostMapping("/refresh")
+    @Operation(
+            summary = "Refresh active JWT token",
+            description =
+                    "Validates an existing unexpired JWT and issues a renewed token with updated expiration time.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Token successfully refreshed",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        examples =
+                                                @ExampleObject(
+                                                        name = "RefreshSuccess",
+                                                        value =
+                                                                """
+                    {
+                      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      "expires_in": "2026-08-27T10:30:00Z"
+                    }
+                    """))),
+                @ApiResponse(responseCode = "401", description = "Token is invalid, expired, or blacklisted")
+            })
+    @PostMapping(value = "/refresh", produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<ResponseEntity<Map<String, Object>>> refresh(
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @Parameter(
+                            name = "Authorization",
+                            in = ParameterIn.HEADER,
+                            description = "Current JWT Bearer token to refresh (Format: 'Bearer <token>')",
+                            required = true,
+                            example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+                    @RequestHeader(name = "Authorization", required = false)
+                    String authHeader) {
         // Validate the Authorization header format.
         if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
             return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()); // Return 401 if invalid.
@@ -155,7 +277,8 @@ public class JwtAuthController {
         }
         // Wrap the validation logic, which might throw an exception, in a Mono.
         return Mono.fromCallable(() -> jwtUtil.validateWithRotation(token)).flatMap(valid -> {
-            // If the token is not valid (expired, bad signature, or blacklisted), return 401.
+            // If the token is not valid (expired, bad signature, or blacklisted), return
+            // 401.
             if (!valid)
                 return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
             String newToken;

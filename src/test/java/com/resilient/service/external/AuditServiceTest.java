@@ -25,6 +25,9 @@ class AuditServiceTest {
         Mockito.when(meterRegistry.timer(Mockito.anyString())).thenReturn(Mockito.mock(Timer.class));
         auditService = new AuditService(meterRegistry);
         auditService.setBatchConcurrency(2); // Set batchConcurrency without reflection
+        auditService.setMaxBatchSize(100);
+        auditService.setAuditTimeoutSeconds(10);
+        auditService.setFailureRate(0.0); // Disable random failures for deterministic tests
     }
 
     private User createUserWithId(Long id) {
@@ -49,6 +52,21 @@ class AuditServiceTest {
 
         StepVerifier.create(result)
                 .expectNextMatches(list -> list.size() == 1 && list.get(0).isSuccess())
+                .verifyComplete();
+    }
+
+    @Test
+    void auditEventStream_withBackpressure() throws Exception {
+        User user = createUserWithId(2L);
+        AuditEvent event1 = new AuditEvent("corr-stream-1", "UPDATE", user, Map.of());
+        AuditEvent event2 = new AuditEvent("corr-stream-2", "DELETE", user, Map.of());
+
+        reactor.core.publisher.Flux<AuditEvent> eventStream = reactor.core.publisher.Flux.just(event1, event2);
+        reactor.core.publisher.Flux<AuditResult> resultStream = auditService.auditEventStream(eventStream);
+
+        StepVerifier.create(resultStream)
+                .expectNextMatches(r -> r.isSuccess() && r.correlationId().startsWith("corr-stream"))
+                .expectNextMatches(r -> r.isSuccess() && r.correlationId().startsWith("corr-stream"))
                 .verifyComplete();
     }
 }

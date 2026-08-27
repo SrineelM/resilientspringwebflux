@@ -1,6 +1,14 @@
 package com.resilient.controller;
 
 import com.resilient.security.ReactiveRateLimiter;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -26,6 +34,10 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/kafka")
 @Profile("local")
+@Tag(
+        name = "Kafka Simulation",
+        description = "Simulated reactive Kafka producer and SSE consumer endpoints (Active in 'local' profile)")
+@SecurityRequirement(name = "bearerAuth")
 public class DemoKafkaController {
 
     /**
@@ -48,8 +60,14 @@ public class DemoKafkaController {
     /**
      * DTO for the message payload to ensure robust validation.
      */
+    @Schema(description = "Kafka message publish payload")
     public record MessageRequest(
-            @NotBlank(message = "Message content cannot be blank")
+            @Schema(
+                            description = "Message payload body",
+                            example = "Order created with ID 98765",
+                            maxLength = 1024,
+                            requiredMode = Schema.RequiredMode.REQUIRED)
+                    @NotBlank(message = "Message content cannot be blank")
                     @Size(max = 1024, message = "Message content must be less than 1024 characters")
                     String content) {}
 
@@ -63,8 +81,39 @@ public class DemoKafkaController {
      * @return A {@link Mono} that completes with a {@link ResponseEntity} indicating success (202 Accepted)
      *         rate-limiting (429 Too Many Requests), or other errors.
      */
-    @PostMapping("/produce") // Defines an HTTP POST endpoint at /kafka/produce.
-    public Mono<ResponseEntity<String>> produce(@Valid @RequestBody MessageRequest request) {
+    @Operation(
+            summary = "Simulate Kafka message publishing",
+            description = "Publishes a message payload to simulated Kafka pipeline with rate-limiting and 10s timeout.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "202",
+                        description = "Message accepted and queued for Kafka transmission",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.TEXT_PLAIN_VALUE,
+                                        examples =
+                                                @ExampleObject(
+                                                        value =
+                                                                "Message produced (simulated): Order created with ID 98765"))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid request (blank or payload exceeding 1024 characters)"),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT"),
+                @ApiResponse(responseCode = "429", description = "Rate limit exceeded"),
+                @ApiResponse(responseCode = "500", description = "Message processing error")
+            })
+    @PostMapping(
+            value = "/produce",
+            consumes = MediaType.APPLICATION_JSON_VALUE) // Defines an HTTP POST endpoint at /kafka/produce.
+    public Mono<ResponseEntity<String>> produce(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            description = "Message content payload",
+                            required = true,
+                            content = @Content(schema = @Schema(implementation = MessageRequest.class)))
+                    @Valid
+                    @RequestBody
+                    MessageRequest request) {
         // Define the core logic for producing the message.
         Mono<ResponseEntity<String>> produceLogic = Mono.just(request.content())
                 // Set a 10-second timeout. If the pipeline doesn't complete by then, it will error out.
@@ -109,6 +158,20 @@ public class DemoKafkaController {
      *         formatted as a text/event-stream.
      */
     // Defines an HTTP GET endpoint that produces a Server-Sent Event stream.
+    @Operation(
+            summary = "Simulate Kafka topic consumption stream",
+            description = "Consumes 10 simulated Kafka messages as Server-Sent Events (SSE) at 1-second intervals.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "SSE stream established emitting consumed Kafka messages",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
+                                        examples = @ExampleObject(value = "data: Demo Kafka message #0\n\n"))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT")
+            })
     @GetMapping(value = "/consume", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> consumeMessages() {
         // Create a Flux that emits a new number (0, 1, 2, ...) every second.

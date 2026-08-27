@@ -1,5 +1,6 @@
 package com.resilient.controller;
 
+import com.resilient.dto.ErrorResponse;
 import com.resilient.dto.UserRequest;
 import com.resilient.dto.UserResponse;
 import com.resilient.model.User;
@@ -7,6 +8,15 @@ import com.resilient.service.UserService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import io.micrometer.observation.annotation.Observed;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -36,6 +46,10 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/api/users") // Base path for all endpoints in this controller.
 @Validated // Enables method-level validation for parameters (e.g., @Min, @NotBlank).
 @Observed // Enables Micrometer Observation for all endpoints, providing metrics and traces.
+@Tag(
+        name = "User Management",
+        description = "Endpoints for managing user data with resilience, validation, and role-based security")
+@SecurityRequirement(name = "bearerAuth")
 public class UserManagementController {
 
     // Logger for this controller.
@@ -59,13 +73,47 @@ public class UserManagementController {
      * @return A {@link Mono} of {@link ResponseEntity}. On success, returns 201 Created with the new user's data.
      *         On failure, the circuit breaker may trigger the fallback method.
      */
-    @PostMapping
+    @Operation(
+            summary = "Create a new user",
+            description =
+                    "Creates a new user record in the system with INITIAL 'ACTIVE' status. Protected by circuit breaker and time limiter. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "201",
+                        description = "User created successfully",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid input data (validation failure)",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(implementation = ErrorResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT"),
+                @ApiResponse(responseCode = "403", description = "Access denied - Requires ROLE_ADMIN"),
+                @ApiResponse(
+                        responseCode = "503",
+                        description = "Service unavailable (Circuit breaker open or timeout)",
+                        content = @Content)
+            })
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can create users.
     @CircuitBreaker(
             name = "user-service",
             fallbackMethod = "createUserFallback") // Resilience: Isolates from repeated failures.
     @TimeLimiter(name = "user-service") // Resilience: Prevents requests from waiting indefinitely.
-    public Mono<ResponseEntity<UserResponse>> createUser(@Valid @RequestBody UserRequest request) {
+    public Mono<ResponseEntity<UserResponse>> createUser(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            description = "User details payload to create",
+                            required = true,
+                            content = @Content(schema = @Schema(implementation = UserRequest.class)))
+                    @Valid
+                    @RequestBody
+                    UserRequest request) {
         log.info("Creating user with username: {}", request.username());
         // Start the reactive pipeline by calling the user service.
         return userService
@@ -100,10 +148,35 @@ public class UserManagementController {
      * @return A {@link Mono} of {@link ResponseEntity}. Returns 200 OK with the user data if found,
      *         404 Not Found if not, or 503 Service Unavailable if the fallback is triggered.
      */
-    @GetMapping("/{id}")
+    @Operation(
+            summary = "Get user by ID",
+            description =
+                    "Retrieves an existing user's details by their database ID. Accessible by ADMIN and USER roles.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "User found",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT"),
+                @ApiResponse(responseCode = "404", description = "User not found with specified ID"),
+                @ApiResponse(
+                        responseCode = "503",
+                        description = "Service unavailable (Circuit breaker fallback)",
+                        content = @Content)
+            })
+    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN','USER')") // Security: Admins or regular users can view user details.
     @CircuitBreaker(name = "user-service", fallbackMethod = "getUserFallback") // Resilience: Protects the endpoint.
-    public Mono<ResponseEntity<UserResponse>> getUserById(@PathVariable @Min(1) @NotNull Long id) {
+    public Mono<ResponseEntity<UserResponse>> getUserById(
+            @Parameter(description = "Primary key ID of the user", example = "1", required = true)
+                    @PathVariable
+                    @Min(1)
+                    @NotNull
+                    Long id) {
         // Call the service to find the user by ID.
         return userService
                 .findById(id)
@@ -138,10 +211,44 @@ public class UserManagementController {
      * @return A {@link Mono} of {@link ResponseEntity}. Returns 200 OK with the updated user data,
      *         or 404 Not Found if the user doesn't exist.
      */
-    @PutMapping("/{id}")
+    @Operation(
+            summary = "Update an existing user",
+            description = "Updates user details (username, email, fullName) by ID. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "User updated successfully",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid input payload",
+                        content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_ADMIN"),
+                @ApiResponse(responseCode = "404", description = "User not found with specified ID")
+            })
+    @PutMapping(
+            value = "/{id}",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can update user details.
     public Mono<ResponseEntity<UserResponse>> updateUser(
-            @PathVariable @Min(1) @NotNull Long id, @Valid @RequestBody UserRequest request) {
+            @Parameter(description = "ID of the user to update", example = "1", required = true)
+                    @PathVariable
+                    @Min(1)
+                    @NotNull
+                    Long id,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            description = "Updated user payload",
+                            required = true,
+                            content = @Content(schema = @Schema(implementation = UserRequest.class)))
+                    @Valid
+                    @RequestBody
+                    UserRequest request) {
 
         // Call the service to update the user.
         return userService
@@ -156,7 +263,22 @@ public class UserManagementController {
      *
      * @return A {@link Flux} of {@link UserResponse} objects.
      */
-    @GetMapping
+    @Operation(
+            summary = "List all users",
+            description = "Retrieves all users from the reactive database repository. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "List of users retrieved",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        array = @ArraySchema(schema = @Schema(implementation = UserResponse.class)))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_ADMIN")
+            })
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can list all users.
     public Flux<UserResponse> getAllUsers() {
         return userService.findAll();
@@ -169,6 +291,22 @@ public class UserManagementController {
      *
      * @return A {@link Flux} of {@link UserResponse} objects, formatted as an SSE stream.
      */
+    @Operation(
+            summary = "Stream users via Server-Sent Events",
+            description =
+                    "Streams all users as a real-time reactive Server-Sent Events (text/event-stream) feed with interval pacing. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "SSE stream of users established",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_ADMIN")
+            })
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can access the user stream.
     public Flux<UserResponse> getAllUsersStream() {
@@ -188,9 +326,36 @@ public class UserManagementController {
      * @param query The search term. Must be between 2 and 50 characters.
      * @return A {@link Flux} of matching {@link UserResponse} objects.
      */
-    @GetMapping("/search")
+    @Operation(
+            summary = "Search users by query",
+            description =
+                    "Performs a case-insensitive search matching username or email. Accessible by ADMIN and USER roles.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Search results",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        array = @ArraySchema(schema = @Schema(implementation = UserResponse.class)))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid query parameter (length must be 2-50 characters)",
+                        content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                @ApiResponse(responseCode = "401", description = "Unauthorized")
+            })
+    @GetMapping(value = "/search", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN','USER')") // Security: Admins and users can search.
-    public Flux<UserResponse> searchUsers(@RequestParam @NotBlank @Size(min = 2, max = 50) String query) {
+    public Flux<UserResponse> searchUsers(
+            @Parameter(
+                            description = "Search keyword (matches username or email, min 2 chars)",
+                            example = "john",
+                            required = true)
+                    @RequestParam
+                    @NotBlank
+                    @Size(min = 2, max = 50)
+                    String query) {
 
         // Sanitize the input query to remove leading/trailing whitespace.
         String sanitizedQuery = query.trim();
@@ -208,10 +373,30 @@ public class UserManagementController {
      * @return A {@link Mono} of {@link ResponseEntity}. Returns 200 OK with the updated user data,
      *         or 404 Not Found if the user doesn't exist.
      */
-    @PutMapping("/{id}/status")
+    @Operation(
+            summary = "Update user account status",
+            description = "Changes user state to ACTIVE, INACTIVE, or SUSPENDED. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "User status updated",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                        schema = @Schema(implementation = UserResponse.class))),
+                @ApiResponse(responseCode = "400", description = "Invalid status enum value"),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_ADMIN"),
+                @ApiResponse(responseCode = "404", description = "User not found")
+            })
+    @PutMapping(value = "/{id}/status", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can change a user's status.
     public Mono<ResponseEntity<UserResponse>> updateUserStatus(
-            @PathVariable @Min(1) @NotNull Long id, @RequestParam @NotNull User.UserStatus status) {
+            @Parameter(description = "ID of the user", example = "1", required = true) @PathVariable @Min(1) @NotNull
+                    Long id,
+            @Parameter(description = "New account status", example = "INACTIVE", required = true) @RequestParam @NotNull
+                    User.UserStatus status) {
 
         // Call the service to update the user's status.
         return userService
@@ -230,9 +415,24 @@ public class UserManagementController {
      * @return A {@link Mono} of {@link ResponseEntity}. Returns 204 No Content on successful deletion,
      *         or 404 Not Found if the user did not exist.
      */
+    @Operation(
+            summary = "Delete user by ID",
+            description = "Permanently removes a user record from the database. Requires ADMIN role.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "User deleted successfully"),
+                @ApiResponse(responseCode = "401", description = "Unauthorized"),
+                @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_ADMIN"),
+                @ApiResponse(responseCode = "404", description = "User not found")
+            })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')") // Security: Only admins can delete users.
-    public Mono<ResponseEntity<Void>> deleteUser(@PathVariable @Min(1) @NotNull Long id) {
+    public Mono<ResponseEntity<Void>> deleteUser(
+            @Parameter(description = "ID of the user to delete", example = "1", required = true)
+                    @PathVariable
+                    @Min(1)
+                    @NotNull
+                    Long id) {
         // Call the service to delete the user.
         return userService
                 .deleteUser(id)

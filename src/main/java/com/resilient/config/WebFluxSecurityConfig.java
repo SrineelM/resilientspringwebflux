@@ -147,6 +147,10 @@ public class WebFluxSecurityConfig {
                         .pathMatchers("/h2-console/**")
                         .permitAll()
 
+                        // Swagger/OpenAPI endpoints
+                        .pathMatchers("/webjars/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
+                        .permitAll()
+
                         // Protected endpoints - authentication required
 
                         // User management endpoints

@@ -1,0 +1,19 @@
+# Build and dependency directories
+build/
+.gradle/
+out/
+target/
+bin/
+
+# IDE and Editor files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.DS_Store
+
+# Logs and runtime artifacts
+*.log
+scratch/

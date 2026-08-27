@@ -4,6 +4,14 @@ import com.resilient.security.ReactiveRateLimiter;
 import com.resilient.security.WebhookSignatureValidator;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.micrometer.observation.annotation.Observed;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Duration;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -34,6 +42,10 @@ import reactor.core.scheduler.Schedulers;
 @RestController
 @RequestMapping("/api/webhook")
 @Observed
+@Tag(
+        name = "Secure Webhook",
+        description =
+                "Ingests external webhook events with timestamp anti-replay verification, HMAC SHA-256 signatures, and rate limiting")
 public class SecureWebhookController {
 
     // Logger for this controller.
@@ -66,10 +78,46 @@ public class SecureWebhookController {
      * @return A {@link Mono} of {@link ResponseEntity}. It returns 202 Accepted on success,
      *         or an appropriate error status (400, 401, 429, 500) on failure.
      */
+    @Operation(
+            summary = "Ingest secure webhook event",
+            description =
+                    "Validates event freshness via `x-webhook-timestamp` (anti-replay within 5s window) and cryptographic integrity via `x-webhook-signature` (HMAC SHA-256).",
+            security = {@SecurityRequirement(name = "webhookSignature"), @SecurityRequirement(name = "webhookTimestamp")
+            })
+    @ApiResponses(
+            value = {
+                @ApiResponse(
+                        responseCode = "202",
+                        description = "Webhook event accepted for asynchronous background processing",
+                        content =
+                                @Content(
+                                        mediaType = MediaType.TEXT_PLAIN_VALUE,
+                                        examples = @ExampleObject(value = "Event processed"))),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid or expired timestamp (anti-replay check failed)"),
+                @ApiResponse(
+                        responseCode = "401",
+                        description = "HMAC signature verification or static secret validation failed"),
+                @ApiResponse(responseCode = "429", description = "Rate limit exceeded for requesting IP address"),
+                @ApiResponse(responseCode = "500", description = "Internal processing or circuit breaker failure")
+            })
     @PostMapping(value = "/event", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @CircuitBreaker(name = "webhook-processor") // Wraps the method in a circuit breaker.
+    @CircuitBreaker(name = "webhook-processor")
     public Mono<ResponseEntity<String>> processEvent(
-            @RequestHeader Map<String, String> headers, @RequestBody Mono<String> payload) {
+            @Parameter(hidden = true) @RequestHeader Map<String, String> headers,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            description = "Raw JSON event payload",
+                            required = true,
+                            content =
+                                    @Content(
+                                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                            examples =
+                                                    @ExampleObject(
+                                                            value =
+                                                                    "{\"event\": \"payment.success\", \"id\": \"evt_12345\", \"amount\": 99.99}")))
+                    @RequestBody
+                    Mono<String> payload) {
 
         // Attempt to get the real client IP, falling back to "unknown".
         String ip = headers.getOrDefault("x-forwarded-for", headers.getOrDefault("x-real-ip", "unknown"));

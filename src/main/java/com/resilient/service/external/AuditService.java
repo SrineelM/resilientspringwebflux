@@ -34,6 +34,7 @@ import reactor.util.retry.Retry;
  *   <li>Timeouts, retries, and error handling</li>
  *   <li>Context propagation (e.g., correlationId via MDC)</li>
  *   <li>Batch processing with concurrency control</li>
+ *   <li>Backpressure handling for event streams</li>
  * </ul>
  * <p>
  * Metrics:
@@ -196,6 +197,40 @@ public class AuditService implements UserAuditPort {
     }
 
     /**
+     * Audits a continuous stream of user actions/events with backpressure support.
+     * <p>
+     * This method:
+     * <ul>
+     *   <li>Accepts a reactive stream of events</li>
+     *   <li>Applies backpressure by buffering when downstream processing is slow,
+     *       and dropping oldest events if the buffer is full to prevent OutOfMemory.</li>
+     *   <li>Processes events with bounded concurrency</li>
+     * </ul>
+     *
+     * @param events Stream of audit events
+     * @return Flux emitting the audit results
+     */
+    @Override
+    public Flux<AuditResult> auditEventStream(Flux<AuditEvent> events) {
+        return events
+                // 1) Implement concept of backpressure: buffer up to maxBatchSize items.
+                // If the downstream processing is slower than the upstream emission,
+                // we buffer up to maxBatchSize. If the buffer is full, we drop the oldest items.
+                .onBackpressureBuffer(maxBatchSize, reactor.core.publisher.BufferOverflowStrategy.DROP_OLDEST)
+                .flatMap(
+                        event -> auditUserAction(event.correlationId(), event.action(), event.user(), event.context())
+                                .onErrorResume(error -> {
+                                    log.error(
+                                            "Failed to audit event from stream: correlationId={}, error={}",
+                                            event.correlationId(),
+                                            error.getMessage());
+                                    return Mono.just(AuditResult.failure(
+                                            event.correlationId(), "Stream audit failed: " + error.getMessage()));
+                                }),
+                        batchConcurrency);
+    }
+
+    /**
      * Core audit operation with retry logic, metrics, and simulated failures/delays.
      * <p>
      * This method demonstrates:
@@ -341,5 +376,32 @@ public class AuditService implements UserAuditPort {
      */
     public void setBatchConcurrency(int batchConcurrency) {
         this.batchConcurrency = batchConcurrency;
+    }
+
+    /**
+     * Setter for maxBatchSize (for testing purposes).
+     *
+     * @param maxBatchSize New batch size
+     */
+    public void setMaxBatchSize(int maxBatchSize) {
+        this.maxBatchSize = maxBatchSize;
+    }
+
+    /**
+     * Setter for auditTimeoutSeconds (for testing purposes).
+     *
+     * @param auditTimeoutSeconds New timeout in seconds
+     */
+    public void setAuditTimeoutSeconds(int auditTimeoutSeconds) {
+        this.auditTimeoutSeconds = auditTimeoutSeconds;
+    }
+
+    /**
+     * Setter for failureRate (for testing purposes).
+     *
+     * @param failureRate New failure rate
+     */
+    public void setFailureRate(double failureRate) {
+        this.failureRate = failureRate;
     }
 }

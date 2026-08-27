@@ -1,9 +1,9 @@
 ---
 # Developer & Architect Guide
 
-**Project:** Resilient Spring WebFlux POC  
-**Version:** 1.0.0  
-**Audience:** Senior Architects, Software Engineers, Tech Leads  
+**Project:** Resilient Spring WebFlux POC
+**Version:** 1.0.0
+**Audience:** Senior Architects, Software Engineers, Tech Leads
 **Last Updated:** November 1, 2025
 ---
 
@@ -114,7 +114,7 @@ All components use **Reactor** (Project Reactor) for non-blocking, asynchronous 
 - **Mono**: Single value (0 or 1)
 - **Flux**: Multiple values (0 to N)
 - **Schedulers**: For offloading blocking operations
-- **Backpressure**: Automatic flow control
+- **Backpressure**: Automatic flow control and explicit handling (e.g., `onBackpressureBuffer` in `AuditService.auditEventStream`)
 
 ### 2.3 Transactional Outbox Pattern
 
@@ -462,6 +462,22 @@ public class MyService {
     }
 }
 ```
+
+### 6.7 Backpressure and Stream Auditing
+
+The `AuditService` demonstrates explicit backpressure handling for event streams:
+
+```java
+public Flux<AuditResult> auditEventStream(Flux<AuditEvent> events) {
+    return events
+            // Explicit backpressure: buffer up to maxBatchSize items.
+            // Drops oldest events if the buffer is full to prevent memory exhaustion.
+            .onBackpressureBuffer(maxBatchSize, BufferOverflowStrategy.DROP_OLDEST)
+            .flatMap(event -> auditUserAction(...), batchConcurrency);
+}
+```
+
+This ensures the system remains stable even when receiving events faster than it can process them.
 
 ---
 

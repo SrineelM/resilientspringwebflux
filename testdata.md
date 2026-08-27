@@ -1,7 +1,7 @@
 ---
 # Test Data Reference
 
-**Project:** Resilient Spring WebFlux POC  
+**Project:** Resilient Spring WebFlux POC
 **Last Updated:** November 1, 2025
 ---
 

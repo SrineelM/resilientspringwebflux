@@ -1,6 +1,7 @@
 package com.resilient.dto;
 
 import com.resilient.model.User;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * DTO for user responses returned by the API.
@@ -15,14 +16,18 @@ import com.resilient.model.User;
  * @param createdAt creation timestamp (ISO string)
  * @param updatedAt last update timestamp (ISO string)
  */
+@Schema(description = "User details response payload")
 public record UserResponse(
-        Long id,
-        String username,
-        String email,
-        String fullName,
-        User.UserStatus status,
-        String createdAt,
-        String updatedAt) {
+        @Schema(description = "Unique system identifier for the user", example = "1") Long id,
+        @Schema(description = "User's unique username", example = "johndoe") String username,
+        @Schema(description = "User's primary email address", example = "johndoe@example.com") String email,
+        @Schema(description = "User's full name", example = "John Doe") String fullName,
+        @Schema(description = "Current account status", example = "ACTIVE") User.UserStatus status,
+        @Schema(description = "Timestamp when the user account was created", example = "2026-08-27T08:00:00")
+                String createdAt,
+        @Schema(description = "Timestamp when the user account was last updated", example = "2026-08-27T08:30:00")
+                String updatedAt) {
+
     /**
      * Maps a User domain object to a UserResponse DTO.
      *

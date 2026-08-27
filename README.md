@@ -191,6 +191,8 @@ cd resilientspringwebflux
 ```
 
 Application starts at: **http://localhost:8080**
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **OpenAPI Docs**: http://localhost:8080/v3/api-docs
 
 **Verify it's running**:
 ```bash
@@ -403,7 +405,7 @@ src/main/java/com/resilient/
 
 ### 5. Reactive Programming
 - ✅ Non-blocking I/O throughout
-- ✅ Backpressure handling
+- ✅ Backpressure handling (e.g., AuditService event streaming)
 - ✅ Proper Mono/Flux usage
 - ✅ Custom schedulers for blocking operations
 - ✅ Context propagation
@@ -475,6 +477,8 @@ src/main/java/com/resilient/
 | `/actuator/prometheus` | Prometheus metrics |
 | `/actuator/metrics` | Available metrics |
 | `/actuator/info` | Application info |
+| `/swagger-ui.html` | Swagger UI Documentation |
+| `/v3/api-docs` | OpenAPI 3 Specification |
 
 ### Custom Health Indicators
 - Database connectivity (R2DBC)

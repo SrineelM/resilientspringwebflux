@@ -1,9 +1,9 @@
-Resilient Spring WebFlux Proof of Concept
-AI Coding Agent Instructions
+# Resilient Spring WebFlux Proof of Concept
+## AI Coding Agent Instructions
 
 This project includes a .github/copilot-instructions.md file to guide AI coding agents (like GitHub Copilot) in understanding the architecture, workflows, conventions, and integration points specific to this codebase. This ensures automated coding agents generate code and suggestions that fit the project’s structure and standards, improving productivity and code quality. See .github/copilot-instructions.md for details.
 
-Overview
+## Overview
 
 This project demonstrates a scalable, secure, observable, and resilient reactive Java application built with Spring WebFlux. It integrates:
 - Security hardening (JWT rotation, extended claims, selective CSRF, strict headers)
@@ -12,32 +12,32 @@ This project demonstrates a scalable, secure, observable, and resilient reactive
 - Observability (Micrometer, OpenTelemetry tracing, Prometheus, Zipkin)
 - Modular profile-driven behavior (prod vs local/dev stubs)
 
-Key Features
+## Key Features
 
-Security:
+### Security:
 - JWT auth with rotating keys, refresh support, issuer/audience enforcement, extended claim validation (type/client_id/version).
 - SecretProvider abstraction for external secret rotation.
 - Selective CSRF toggle (disabled by default for pure API, can be enabled).
 - HMAC-signed webhook endpoints with replay protection potential.
 - Strict security headers: CSP, Referrer-Policy, Frame-Deny, Permissions-Policy.
 
-Resilience:
+### Resilience:
 - Resilience4j circuit breakers, retries, bulkheads & time limiters.
 - Circuit breaker + exponential backoff around outbox publishing.
 - Reactive sliding-window rate limiting: Redis in prod, in-memory for dev/test.
 
-Messaging Reliability:
+### Messaging Reliability:
 - Kafka & ActiveMQ producers with correlationId + W3C traceparent propagation.
 - Dead-letter handling (Kafka DLQ via suffix; ActiveMQ DLQ reroute on processing failure).
 - Transactional Outbox pattern (`message_outbox` table) with reactive dispatcher: NEW -> IN_PROGRESS -> PUBLISHED / FAILED, retry & circuit breaker.
 - Profile isolation: local/dev use stub producers (no external brokers required).
 
-Observability:
+### Observability:
 - Micrometer metrics, composite registries, Prometheus endpoint.
 - OpenTelemetry tracing bridge with custom correlation & W3C traceparent support.
 - Structured logging (logstash encoder) and correlation id propagation.
 
-Micrometer Baggage (How-To)
+## Micrometer Baggage (How-To)
 ---------------------------
 This project demonstrates propagating custom context using W3C Baggage via Micrometer/OpenTelemetry.
 
@@ -69,8 +69,7 @@ Cloud-Native:
 - Graceful shutdown, boundedElastic offload for blocking I/O (JMS), container-ready image (Dockerfile), health & readiness endpoints.
 
 
-Code Documentation & Educational Value
---------------------------------------
+## Code Documentation & Educational Value
 All Java source files in this project are thoroughly documented with:
 - Class-level Javadocs explaining the purpose and context of each class or interface.
 - Method-level Javadocs describing parameters, return values, and behavior.
@@ -83,7 +82,7 @@ This makes the codebase highly accessible for beginners and new contributors, se
 
 If you are new to the project, you can browse any Java file to find clear explanations of its role and implementation details.
 
-Prerequisites
+## Prerequisites
 
 JDK 17+
 
@@ -93,7 +92,7 @@ Docker (for observability stack, Kafka, ActiveMQ, PostgreSQL in local/dev)
 
 Optional: Postman or curl for API testing
 
-Messaging Reliability Architecture
+## Messaging Reliability Architecture
 
 1. Producers (Kafka / ActiveMQ)
     - Inject correlationId and traceparent if absent.
@@ -153,7 +152,7 @@ outbox.dispatch.concurrency: 4             # max parallel event dispatches
 outbox.dispatch.batchSize: 25              # SQL LIMIT per poll cycle
 ```
 
-Security Enhancements
+## Security Enhancements
 
 Implemented recommendations from security review:
 - Key rotation & previous key validation (`JwtUtil#validateWithRotation`).
@@ -162,23 +161,23 @@ Implemented recommendations from security review:
 - Enhanced rate limiting filter choosing user principal key over IP when authenticated.
 - Repository-backed credentials replacing demo static values; password hashing via DelegatingPasswordEncoder.
 
-Rate Limiting
+## Rate Limiting
 - Prod: Redis sliding window LUA script (precise) with ZSET pruning.
 - Dev/Test: InMemory limiter (low thresholds) enables deterministic 429 testing.
 
-Running Locally
+## Running Locally
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 Stubs prevent external Kafka/ActiveMQ/Redis requirements; H2 auto-initializes schema.
 
-Running Tests
+## Running Tests
 ```bash
 ./gradlew test
 ```
 Tests cover JWT extended claims, outbox persistence, rate limiting (429), tracing headers.
 
-Configuration Highlights (selected)
+## Configuration Highlights (selected)
 
 | Property | Purpose | Example |
 |----------|---------|---------|
@@ -191,12 +190,12 @@ Configuration Highlights (selected)
 | outbox.dispatch.interval.ms | Poll interval | 5000 |
 | webhook.rate-limit / window | Rate limit & window (prod Redis) | 30 / 60s |
 
-Developer Tips
+## Developer Tips
 - Use `local` profile for fastest startup (no external brokers).
 - Add new outbox event types via `persistEvent()` then rely on dispatcher.
 - For DLQ testing, make consumer topic configurable (already property-driven) and consider enabling embedded Kafka test.
 
-Planned / Optional Enhancements
+## Planned / Optional Enhancements
 - Embedded Kafka DLQ integration test (enable placeholder).
 - Distinguish transient vs permanent outbox failures (no-retry classification).
 - Adopt OpenTelemetry automatic instrumentation for JMS & Kafka.
@@ -625,5 +624,3 @@ This project is provided as a reference implementation for educational purposes.
 - **Testing**: See `testdata.md` and `postman.md`
 
 ---
-
-Clone the repository
